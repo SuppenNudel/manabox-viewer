@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ManaBox Card Viewer (Client)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/condition.css">
+</head>
+<body>
+    <div class="page">
+        <header class="topbar">
+            <div>
+                <h1>ManaBox Card Collection</h1>
+                <p class="subtitle">Client-side viewer for your collection CSV</p>
+            </div>
+            <div class="topbar-actions">
+                <button id="toggle-details" class="toggle-btn active" type="button">Details</button>
+                <button id="enrich-visible" class="ghost-btn" type="button">Enrich visible</button>
+            </div>
+        </header>
+
+        <div class="content">
+            <aside class="sidebar">
+                <section class="panel">
+                    <h2>Load CSV</h2>
+                    <div id="dropzone" class="dropzone" tabindex="0">
+                        <p>Drag and drop ManaBox_Collection.csv here</p>
+                        <span>or</span>
+                        <label class="file-btn" for="csv-file">Choose file</label>
+                        <input id="csv-file" type="file" accept=".csv" />
+                    </div>
+                    <div class="file-status" id="file-status">No file loaded</div>
+                </section>
+
+                <section class="panel">
+                    <h2>Filters</h2>
+
+                    <div class="filter-group">
+                        <label for="search-name">Card Name</label>
+                        <input type="text" id="search-name" class="filter-input" placeholder="Search by name" />
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="filter-binder-name">Binder Name</label>
+                        <select id="filter-binder-name" class="filter-select">
+                            <option value="">All Binders</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="filter-binder-type">Binder Type</label>
+                        <select id="filter-binder-type" class="filter-select">
+                            <option value="">All Types</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="filter-rarity">Rarity</label>
+                        <select id="filter-rarity" class="filter-select">
+                            <option value="">All Rarities</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="filter-condition">Condition</label>
+                        <select id="filter-condition" class="filter-select">
+                            <option value="">All Conditions</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="filter-language">Language</label>
+                        <select id="filter-language" class="filter-select">
+                            <option value="">All Languages</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="filter-foil">Foil Status</label>
+                        <select id="filter-foil" class="filter-select">
+                            <option value="">All</option>
+                            <option value="normal">Normal</option>
+                            <option value="foil">Foil</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="filter-cmc-operator">Mana Value (CMC)</label>
+                        <div class="grid-2">
+                            <select id="filter-cmc-operator" class="filter-select">
+                                <option value="">Any</option>
+                                <option value="=">=</option>
+                                <option value="!=">!=</option>
+                                <option value="<"><</option>
+                                <option value="<="><=</option>
+                                <option value=">">></option>
+                                <option value=">=">>=</option>
+                            </select>
+                            <input type="number" id="filter-cmc-value" class="filter-select" placeholder="Value" min="0" step="1" />
+                        </div>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="filter-card-type">Card Type</label>
+                        <select id="filter-card-type" class="filter-select">
+                            <option value="">All Types</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Format Legality Filters</label>
+                        <div id="format-filters-container"></div>
+                        <button id="add-format-filter" class="ghost-btn" type="button">+ Add Format Filter</button>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Sort Cards</label>
+                        <div id="sort-criteria-container"></div>
+                        <button id="add-sort-criteria" class="ghost-btn" type="button">+ Add Sort</button>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Saved Configurations</label>
+                        <select id="saved-configs" class="filter-select">
+                            <option value="">Load a saved config</option>
+                        </select>
+                        <div class="grid-2">
+                            <button id="save-config" class="ghost-btn" type="button">Save Config</button>
+                            <button id="delete-config" class="danger-btn" type="button">Delete</button>
+                        </div>
+                    </div>
+
+                    <button id="apply-filters" class="primary-btn" type="button">Apply Filters</button>
+                    <button id="reset-filters" class="danger-btn" type="button">Reset Filters</button>
+                </section>
+            </aside>
+
+            <main class="card-list">
+                <div class="cards-info">
+                    <span>Total cards: <strong id="card-count">0</strong></span>
+                    <span id="enrich-status" class="status-chip">Scryfall: idle</span>
+                </div>
+                <div id="cards-container" class="cards-grid">
+                    <div class="loading">Load your CSV to begin.</div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="assets/js/app.js"></script>
+</body>
+</html>

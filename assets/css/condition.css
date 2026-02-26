@@ -1,0 +1,29 @@
+/* Cardmarket condition badge styling */
+
+.article-condition {
+    display: inline-block;
+    text-decoration: none;
+    color: inherit;
+}
+
+.article-condition .badge {
+    width: 32px;
+    max-height: 16px;
+    color: #ffffff;
+    line-height: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-align: center;
+    display: inline-block;
+}
+
+.article-condition.condition-mt .badge { background-color: #0aa2c0; }
+.article-condition.condition-nm .badge { background-color: #1b7f5d; }
+.article-condition.condition-ex .badge { background-color: #7fbf4d; }
+.article-condition.condition-gd .badge { background-color: #e0b645; color: #2b2b2b; }
+.article-condition.condition-lp .badge { background-color: #e2833c; }
+.article-condition.condition-pl .badge { background-color: #c94b4b; }
+.article-condition.condition-po .badge { background-color: #8b2c2c; }
