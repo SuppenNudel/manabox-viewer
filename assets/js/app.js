@@ -200,6 +200,29 @@ const COLOR_FILTER_OPTIONS = [
     { value: "g", label: "G", className: "color-g" }
 ];
 
+const COLOR_ORDER = ["w", "u", "b", "r", "g"];
+
+function canonicalColorKey(code) {
+    return String(code || "")
+        .toLowerCase()
+        .split("")
+        .filter(color => COLOR_ORDER.includes(color))
+        .sort((a, b) => COLOR_ORDER.indexOf(a) - COLOR_ORDER.indexOf(b))
+        .join("");
+}
+
+function buildColorRankMap(sequence) {
+    const map = new Map();
+    sequence.forEach((code, index) => {
+        map.set(canonicalColorKey(code), index + 1);
+    });
+    return map;
+}
+
+const TWO_COLOR_RANK = buildColorRankMap(["wu", "ub", "br", "rg", "gw", "wb", "ur", "bg", "rw", "gu"]);
+const THREE_COLOR_RANK = buildColorRankMap(["gwu", "wub", "ubr", "brg", "rgw", "wbg", "urw", "bgu", "rwb", "wur"]);
+const FOUR_COLOR_RANK = buildColorRankMap(["wubr", "ubrg", "brgw", "rgwu", "gwub"]);
+
 function setStatus(text) {
     elements.enrichStatus.textContent = text;
 }
@@ -1306,6 +1329,22 @@ function getSortValue(card, sortField) {
             }
             return 999;
         }
+        case "color": {
+            const colors = getCardColors(card) || [];
+            const uniqueSorted = [...new Set(colors)].sort((a, b) => COLOR_ORDER.indexOf(a) - COLOR_ORDER.indexOf(b));
+            const colorKey = uniqueSorted.join("");
+            const count = uniqueSorted.length;
+
+            let comboRank = 999;
+            if (count === 0) comboRank = 0;
+            else if (count === 1) comboRank = COLOR_ORDER.indexOf(colorKey) + 1;
+            else if (count === 2) comboRank = TWO_COLOR_RANK.get(colorKey) || 999;
+            else if (count === 3) comboRank = THREE_COLOR_RANK.get(colorKey) || 999;
+            else if (count === 4) comboRank = FOUR_COLOR_RANK.get(colorKey) || 999;
+            else if (count === 5) comboRank = 1;
+
+            return `${String(count).padStart(2, "0")}-${String(comboRank).padStart(3, "0")}-${colorKey || "z"}`;
+        }
         default:
             return "";
     }
@@ -1346,6 +1385,7 @@ function createSortCriteriaRow(sortId, isFirst) {
             <option value="binder">Binder Name</option>
             <option value="cmc">Mana Value (CMC)</option>
             <option value="type">Card Type</option>
+            <option value="color">Color</option>
         </select>
         <select class="sort-direction-select" data-sort-id="${sortId}">
             <option value="asc">Ascending</option>
