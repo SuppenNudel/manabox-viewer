@@ -11,6 +11,9 @@ const state = {
     scryfallObserver: null,
     scryfallCache: null,
     scryfallInFlight: new Map(),
+    bulkRemoteMeta: null,
+    bulkLocalUpdatedAt: null,
+    bulkLoadingPromise: null,
     availableFormats: [
         "standard", "future", "historic", "gladiator", "pioneer", "modern",
         "legacy", "pauper", "vintage", "penny", "commander", "oathbreaker",
@@ -99,12 +102,22 @@ const elements = {
     dropzone: document.getElementById("dropzone"),
     fileInput: document.getElementById("csv-file"),
     fileStatus: document.getElementById("file-status"),
+    bulkStatus: document.getElementById("bulk-status"),
+    updateBulkDataBtn: document.getElementById("update-bulk-data"),
+    bulkProgress: document.getElementById("bulk-progress"),
+    bulkProgressBar: document.getElementById("bulk-progress-bar"),
+    bulkProgressText: document.getElementById("bulk-progress-text"),
+    infoDialog: document.getElementById("info-dialog"),
+    infoDialogTitle: document.getElementById("info-dialog-title"),
+    infoDialogBody: document.getElementById("info-dialog-body"),
+    infoDialogClose: document.getElementById("info-dialog-close"),
     searchNameInput: document.getElementById("search-name"),
     filterBinderNameSelect: document.getElementById("filter-binder-name"),
     filterBinderTypeSelect: document.getElementById("filter-binder-type"),
     filterRaritySelect: document.getElementById("filter-rarity"),
     filterConditionSelect: document.getElementById("filter-condition"),
     filterLanguageSelect: document.getElementById("filter-language"),
+    filterColorSelect: document.getElementById("filter-color"),
     filterFoilSelect: document.getElementById("filter-foil"),
     filterCMCOperator: document.getElementById("filter-cmc-operator"),
     filterCMCValue: document.getElementById("filter-cmc-value"),
@@ -125,8 +138,158 @@ const elements = {
     enrichStatus: document.getElementById("enrich-status")
 };
 
+const SCRYFALL_DEFAULT_CARDS_META_URL = "https://api.scryfall.com/bulk-data/default_cards";
+const META_BULK_DEFAULT_CARDS_UPDATED_AT_KEY = "bulk_default_cards_updated_at";
+
 function setStatus(text) {
     elements.enrichStatus.textContent = text;
+}
+
+function closeInfoDialog() {
+    if (!elements.infoDialog) return;
+    elements.infoDialog.classList.add("hidden");
+}
+
+function showInfoDialog({ title = "Information", message = "", html = "", buttonLabel = "OK" }) {
+    if (!elements.infoDialog || !elements.infoDialogTitle || !elements.infoDialogBody || !elements.infoDialogClose) {
+        return;
+    }
+
+    elements.infoDialogTitle.textContent = title;
+    if (html) {
+        elements.infoDialogBody.innerHTML = html;
+    } else {
+        elements.infoDialogBody.innerHTML = `<p>${escapeHtml(message)}</p>`;
+    }
+    elements.infoDialogClose.textContent = buttonLabel;
+    elements.infoDialog.classList.remove("hidden");
+}
+
+function formatBytes(bytes) {
+    if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    let value = bytes;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+        value /= 1024;
+        unit += 1;
+    }
+    return `${value.toFixed(value >= 100 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+function formatDuration(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 1) return "<1s";
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    return `${mins}m ${secs}s`;
+}
+
+function getBulkSizeLabel(meta) {
+    const sizeBytes = meta && Number(meta.size) > 0 ? Number(meta.size) : 0;
+    return sizeBytes > 0 ? ` (~${formatBytes(sizeBytes)})` : "";
+}
+
+function setBulkProgress({ visible, progressPercent = 0, text = "", indeterminate = false }) {
+    if (!elements.bulkProgress || !elements.bulkProgressBar || !elements.bulkProgressText) return;
+
+    elements.bulkProgress.classList.toggle("hidden", !visible);
+    if (!visible) return;
+
+    const clamped = Math.max(0, Math.min(100, progressPercent));
+    elements.bulkProgressBar.style.width = indeterminate ? "100%" : `${clamped}%`;
+    elements.bulkProgressBar.style.opacity = indeterminate ? "0.5" : "1";
+    elements.bulkProgressText.textContent = text;
+
+    const progressTrack = elements.bulkProgress.querySelector(".bulk-progress-track");
+    if (progressTrack) {
+        progressTrack.setAttribute("aria-valuenow", String(Math.round(clamped)));
+    }
+}
+
+async function downloadJsonWithProgress(url, progressLabel, expectedTotalBytes = 0) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Failed to download default cards bulk data");
+
+    const headerTotalBytes = Number(response.headers.get("content-length")) || 0;
+    const totalBytes = headerTotalBytes > 0 ? headerTotalBytes : (Number(expectedTotalBytes) || 0);
+    const hasKnownSize = totalBytes > 0;
+    const usesEstimatedSize = headerTotalBytes <= 0 && hasKnownSize;
+
+    if (!response.body || !response.body.getReader) {
+        setBulkProgress({
+            visible: true,
+            progressPercent: 0,
+            text: hasKnownSize
+                ? `${progressLabel}: downloading 0% • 0 B / ${formatBytes(totalBytes)}${usesEstimatedSize ? " (estimated)" : ""}`
+                : `${progressLabel}: downloading...`,
+            indeterminate: true
+        });
+        const jsonData = await response.json();
+        setBulkProgress({
+            visible: true,
+            progressPercent: 100,
+            text: `${progressLabel}: complete`,
+            indeterminate: false
+        });
+        return jsonData;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const chunks = [];
+    let receivedBytes = 0;
+    const startTime = performance.now();
+
+    setBulkProgress({
+        visible: true,
+        progressPercent: 0,
+        text: `${progressLabel}: starting...`,
+        indeterminate: !hasKnownSize
+    });
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        receivedBytes += value.byteLength;
+        chunks.push(decoder.decode(value, { stream: true }));
+
+        const elapsedSeconds = Math.max((performance.now() - startTime) / 1000, 0.001);
+        const bytesPerSecond = receivedBytes / elapsedSeconds;
+
+        if (hasKnownSize) {
+            const progressPercent = (receivedBytes / totalBytes) * 100;
+            const remainingBytes = Math.max(totalBytes - receivedBytes, 0);
+            const remainingSeconds = bytesPerSecond > 0 ? remainingBytes / bytesPerSecond : Infinity;
+            setBulkProgress({
+                visible: true,
+                progressPercent,
+                text: `${progressLabel}: ${Math.round(progressPercent)}% • ${formatBytes(receivedBytes)} / ${formatBytes(totalBytes)}${usesEstimatedSize ? " (estimated)" : ""} • ~${formatDuration(remainingSeconds)} left`,
+                indeterminate: false
+            });
+        } else {
+            setBulkProgress({
+                visible: true,
+                progressPercent: 100,
+                text: `${progressLabel}: ${formatBytes(receivedBytes)} downloaded`,
+                indeterminate: true
+            });
+        }
+    }
+
+    chunks.push(decoder.decode());
+    const jsonText = chunks.join("");
+    const jsonData = JSON.parse(jsonText);
+
+    setBulkProgress({
+        visible: true,
+        progressPercent: 100,
+        text: `${progressLabel}: complete`,
+        indeterminate: false
+    });
+
+    return jsonData;
 }
 
 function parseCSV(text) {
@@ -240,16 +403,231 @@ function extractCardTypes(typeLine) {
 
 async function openScryfallCache() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open("mkm_linker_cache", 1);
+        const request = indexedDB.open("manabox-viewer", 3);
         request.onupgradeneeded = () => {
             const db = request.result;
             if (!db.objectStoreNames.contains("scryfall")) {
                 db.createObjectStore("scryfall", { keyPath: "id" });
             }
+            if (!db.objectStoreNames.contains("bulk_lookup")) {
+                db.createObjectStore("bulk_lookup", { keyPath: "id" });
+            }
+            if (!db.objectStoreNames.contains("bulk_missing")) {
+                db.createObjectStore("bulk_missing", { keyPath: "id" });
+            }
+            if (!db.objectStoreNames.contains("meta")) {
+                db.createObjectStore("meta", { keyPath: "key" });
+            }
         };
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
     });
+}
+
+function formatIsoDate(value) {
+    if (!value) return "unknown";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString();
+}
+
+function updateBulkStatus() {
+    if (!elements.bulkStatus) return;
+
+    if (elements.updateBulkDataBtn) {
+        elements.updateBulkDataBtn.textContent = "Update bulk data";
+        elements.updateBulkDataBtn.disabled = false;
+    }
+
+    if (!state.bulkRemoteMeta) {
+        elements.bulkStatus.textContent = state.bulkLocalUpdatedAt
+            ? `Bulk data: local ${formatIsoDate(state.bulkLocalUpdatedAt)}`
+            : "Bulk data: unknown";
+        if (elements.updateBulkDataBtn) {
+            elements.updateBulkDataBtn.disabled = true;
+        }
+        return;
+    }
+
+    const remoteDate = state.bulkRemoteMeta.updated_at;
+    const remoteSizeLabel = getBulkSizeLabel(state.bulkRemoteMeta);
+    const localDate = state.bulkLocalUpdatedAt;
+    if (!localDate) {
+        elements.bulkStatus.textContent = `Bulk data: remote ${formatIsoDate(remoteDate)}${remoteSizeLabel} (not downloaded)`;
+        if (elements.updateBulkDataBtn) {
+            elements.updateBulkDataBtn.textContent = "Download bulk data";
+        }
+        return;
+    }
+
+    const isOutdated = new Date(remoteDate).getTime() > new Date(localDate).getTime();
+    elements.bulkStatus.textContent = isOutdated
+        ? `Bulk data: local ${formatIsoDate(localDate)} (newer available: ${formatIsoDate(remoteDate)}${remoteSizeLabel})`
+        : `Bulk data: up to date (${formatIsoDate(localDate)}${remoteSizeLabel})`;
+    if (isOutdated && elements.updateBulkDataBtn) {
+        elements.updateBulkDataBtn.textContent = "Update bulk data (newer available)";
+    }
+}
+
+async function getMetaValue(key) {
+    if (!state.scryfallCache) return null;
+    return new Promise(resolve => {
+        const tx = state.scryfallCache.transaction("meta", "readonly");
+        const request = tx.objectStore("meta").get(key);
+        request.onsuccess = () => {
+            const row = request.result;
+            resolve(row ? row.value : null);
+        };
+        request.onerror = () => resolve(null);
+    });
+}
+
+async function setMetaValue(key, value) {
+    if (!state.scryfallCache) return;
+    return new Promise(resolve => {
+        const tx = state.scryfallCache.transaction("meta", "readwrite");
+        tx.objectStore("meta").put({ key, value });
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+    });
+}
+
+async function getCachedBulkCard(id) {
+    if (!state.scryfallCache) return null;
+    return new Promise(resolve => {
+        const tx = state.scryfallCache.transaction("bulk_lookup", "readonly");
+        const request = tx.objectStore("bulk_lookup").get(id);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => resolve(null);
+    });
+}
+
+async function clearBulkLookup() {
+    if (!state.scryfallCache) return;
+    return new Promise(resolve => {
+        const tx = state.scryfallCache.transaction("bulk_lookup", "readwrite");
+        tx.objectStore("bulk_lookup").clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+    });
+}
+
+async function getBulkMissingEntry(id) {
+    if (!state.scryfallCache) return null;
+    return new Promise(resolve => {
+        const tx = state.scryfallCache.transaction("bulk_missing", "readonly");
+        const request = tx.objectStore("bulk_missing").get(id);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => resolve(null);
+    });
+}
+
+async function clearBulkMissing() {
+    if (!state.scryfallCache) return;
+    return new Promise(resolve => {
+        const tx = state.scryfallCache.transaction("bulk_missing", "readwrite");
+        tx.objectStore("bulk_missing").clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+    });
+}
+
+async function storeBulkMissing(ids, updatedAt) {
+    if (!state.scryfallCache || ids.length === 0) return;
+    return new Promise(resolve => {
+        const tx = state.scryfallCache.transaction("bulk_missing", "readwrite");
+        const store = tx.objectStore("bulk_missing");
+        ids.forEach(id => store.put({ id, updatedAt }));
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+    });
+}
+
+async function getBulkMissingIdsForVersion(ids, updatedAt) {
+    if (!updatedAt) return [];
+
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    const missingIds = [];
+
+    for (const id of uniqueIds) {
+        const entry = await getBulkMissingEntry(id);
+        if (entry && entry.updatedAt === updatedAt) {
+            missingIds.push(id);
+        }
+    }
+
+    return missingIds;
+}
+
+function buildMissingCardsTableHtml(unresolvedIds) {
+    const unresolvedSet = new Set(unresolvedIds);
+    const unresolvedCards = state.allCards.filter(card => unresolvedSet.has(card["Scryfall ID"]));
+
+    const rows = unresolvedCards
+        .slice(0, 100)
+        .map(card => {
+            const cardName = card["Name"] || "Unknown card";
+            const setName = card["Set name"] || "";
+            const setCode = card["Set code"] || "";
+            const collectorNumber = card["Collector number"] || "";
+            const quantity = card["Quantity"] || "0";
+            const scryfallId = card["Scryfall ID"] || "";
+
+            return `<tr>
+                <td>${escapeHtml(cardName)}</td>
+                <td>${escapeHtml(setName)} ${setCode ? `(${escapeHtml(setCode)})` : ""}</td>
+                <td>${escapeHtml(collectorNumber)}</td>
+                <td>${escapeHtml(quantity)}</td>
+                <td>${escapeHtml(scryfallId)}</td>
+            </tr>`;
+        })
+        .join("");
+
+    const omittedCount = unresolvedCards.length - Math.min(unresolvedCards.length, 100);
+    return `
+        <p><strong>${unresolvedIds.length}</strong> Scryfall IDs were not found in <em>default_cards</em>.</p>
+        <table class="dialog-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Set</th>
+                    <th>Collector #</th>
+                    <th>Qty</th>
+                    <th>Scryfall ID</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows}
+            </tbody>
+        </table>
+        ${omittedCount > 0 ? `<p>Showing first 100 rows. ${omittedCount} more not shown.</p>` : ""}
+    `;
+}
+
+function showMissingCardsDialog(unresolvedIds) {
+    if (!unresolvedIds || unresolvedIds.length === 0) return;
+    showInfoDialog({
+        title: "Missing Scryfall IDs",
+        html: buildMissingCardsTableHtml(unresolvedIds),
+        buttonLabel: "Close"
+    });
+}
+
+async function storeBulkCards(cards) {
+    if (!state.scryfallCache || cards.length === 0) return;
+    return new Promise(resolve => {
+        const tx = state.scryfallCache.transaction("bulk_lookup", "readwrite");
+        const store = tx.objectStore("bulk_lookup");
+        cards.forEach(card => store.put(card));
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+    });
+}
+
+async function fetchDefaultCardsMeta() {
+    const response = await fetch(SCRYFALL_DEFAULT_CARDS_META_URL);
+    if (!response.ok) return null;
+    return response.json();
 }
 
 async function getCachedScryfall(id) {
@@ -279,6 +657,12 @@ async function fetchScryfallCard(id) {
     const cached = await getCachedScryfall(id);
     if (cached) return cached;
 
+    const bulkCached = await getCachedBulkCard(id);
+    if (bulkCached) {
+        setCachedScryfall(bulkCached);
+        return bulkCached;
+    }
+
     const request = fetch(`https://api.scryfall.com/cards/${id}`)
         .then(response => response.ok ? response.json() : null)
         .then(data => {
@@ -293,6 +677,127 @@ async function fetchScryfallCard(id) {
 
     state.scryfallInFlight.set(id, request);
     return request;
+}
+
+async function refreshBulkMetaStatus() {
+    state.bulkLocalUpdatedAt = await getMetaValue(META_BULK_DEFAULT_CARDS_UPDATED_AT_KEY);
+    try {
+        state.bulkRemoteMeta = await fetchDefaultCardsMeta();
+    } catch (error) {
+        state.bulkRemoteMeta = null;
+    }
+    updateBulkStatus();
+}
+
+async function loadBulkLookupForIds(ids, options = {}) {
+    const { forceUpdate = false, allowDownload = true, onlyIfMissing = false } = options;
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) return;
+
+    if (!state.bulkRemoteMeta) {
+        await refreshBulkMetaStatus();
+    }
+
+    const remoteMeta = state.bulkRemoteMeta;
+    if (!remoteMeta || !remoteMeta.download_uri) return;
+
+    const remoteUpdatedAt = remoteMeta.updated_at;
+    const localUpdatedAt = state.bulkLocalUpdatedAt;
+    const hasLocalVersion = Boolean(localUpdatedAt);
+    const hasNewerRemote = !localUpdatedAt || (new Date(remoteUpdatedAt).getTime() > new Date(localUpdatedAt).getTime());
+
+    const missingIds = [];
+    for (const id of uniqueIds) {
+        const cached = await getCachedBulkCard(id);
+        if (cached) continue;
+
+        if (localUpdatedAt) {
+            const missingEntry = await getBulkMissingEntry(id);
+            if (missingEntry && missingEntry.updatedAt === localUpdatedAt) {
+                continue;
+            }
+        }
+
+        missingIds.push(id);
+    }
+
+    const shouldDownload = forceUpdate
+        || (onlyIfMissing ? (missingIds.length > 0) : (!hasLocalVersion || hasNewerRemote || missingIds.length > 0));
+    if (!shouldDownload) return;
+    if (!allowDownload) return;
+
+    if (state.bulkLoadingPromise) {
+        await state.bulkLoadingPromise;
+        return;
+    }
+
+    const shouldRefreshAll = forceUpdate || (hasNewerRemote && !onlyIfMissing);
+
+    const targetIds = shouldRefreshAll
+        ? uniqueIds
+        : (missingIds.length > 0 ? missingIds : uniqueIds);
+
+    state.bulkLoadingPromise = (async () => {
+        const label = forceUpdate ? "updating" : "loading";
+        setStatus(`Scryfall: ${label} default cards bulk data`);
+        const allCards = await downloadJsonWithProgress(remoteMeta.download_uri, "Bulk data", Number(remoteMeta.size) || 0);
+        const idSet = new Set(targetIds);
+        const matchedCards = [];
+
+        for (const card of allCards) {
+            if (idSet.has(card.id)) {
+                matchedCards.push(card);
+                idSet.delete(card.id);
+                if (idSet.size === 0) break;
+            }
+        }
+
+        if (shouldRefreshAll) {
+            await clearBulkLookup();
+            await clearBulkMissing();
+        }
+
+        await storeBulkCards(matchedCards);
+        const unresolvedIds = Array.from(idSet);
+        await storeBulkMissing(unresolvedIds, remoteUpdatedAt);
+        await setMetaValue(META_BULK_DEFAULT_CARDS_UPDATED_AT_KEY, remoteUpdatedAt);
+        state.bulkLocalUpdatedAt = remoteUpdatedAt;
+        updateBulkStatus();
+
+        return {
+            unresolvedIds
+        };
+    })();
+
+    try {
+        const bulkResult = await state.bulkLoadingPromise;
+        const unresolvedIds = bulkResult && Array.isArray(bulkResult.unresolvedIds)
+            ? bulkResult.unresolvedIds
+            : [];
+
+        if (unresolvedIds.length > 0) {
+            showMissingCardsDialog(unresolvedIds);
+        }
+
+        setStatus("Scryfall: idle");
+    } catch (error) {
+        setStatus("Scryfall: bulk data load failed");
+        setBulkProgress({
+            visible: true,
+            progressPercent: 0,
+            text: "Bulk data: download failed",
+            indeterminate: false
+        });
+    } finally {
+        state.bulkLoadingPromise = null;
+        if (elements.bulkProgress && !elements.bulkProgressText.textContent.includes("failed")) {
+            setTimeout(() => {
+                if (!state.bulkLoadingPromise) {
+                    setBulkProgress({ visible: false });
+                }
+            }, 1200);
+        }
+    }
 }
 
 function buildSelectOptions(selectEl, values) {
@@ -528,7 +1033,56 @@ function removeSortCriteria(sortId) {
     if (row) row.remove();
 }
 
-function applyFilters() {
+function getCardColors(card) {
+    if (!card._scryfall) return null;
+
+    const sourceColors = Array.isArray(card._scryfall.colors) ? card._scryfall.colors : [];
+    return sourceColors.map(color => String(color).toLowerCase());
+}
+
+function matchesColorFilter(card, colorFilter) {
+    if (!colorFilter) return true;
+
+    const colors = getCardColors(card);
+    if (colors === null) return false;
+
+    if (colorFilter === "multicolored") return colors.length > 1;
+    if (colorFilter === "monocolored") return colors.length === 1;
+    if (colorFilter === "colorless") return colors.length === 0;
+
+    return colors.includes(colorFilter);
+}
+
+function hasScryfallDependentFilters(filters) {
+    const hasCmcFilter = Boolean(filters.cmcOperator && filters.cmcValue);
+    const hasCardTypeFilter = Boolean(filters.cardType);
+    const hasColorFilter = Boolean(filters.color);
+    const hasFormatFilter = state.formatFilters.some(filter => filter.format);
+    return hasCmcFilter || hasCardTypeFilter || hasColorFilter || hasFormatFilter;
+}
+
+async function enrichCardsForScryfallFilters(cards) {
+    const cardsToEnrich = cards.filter(card => !card._scryfall && card["Scryfall ID"]);
+    if (cardsToEnrich.length === 0) return;
+
+    await loadBulkLookupForIds(cardsToEnrich.map(card => card["Scryfall ID"]), { allowDownload: false });
+
+    const total = cardsToEnrich.length;
+    const batchSize = 20;
+
+    setStatus(`Scryfall: enriching ${total} cards for filters`);
+
+    for (let index = 0; index < total; index += batchSize) {
+        const batch = cardsToEnrich.slice(index, index + batchSize);
+        await Promise.all(batch.map(card => enrichCard(card, null)));
+        const done = Math.min(index + batch.length, total);
+        setStatus(`Scryfall: enriching ${done}/${total} for filters`);
+    }
+
+    setStatus("Scryfall: idle");
+}
+
+async function applyFilters() {
     const filters = {
         name: elements.searchNameInput.value.toLowerCase(),
         binderName: elements.filterBinderNameSelect.value.toLowerCase(),
@@ -536,11 +1090,16 @@ function applyFilters() {
         rarity: elements.filterRaritySelect.value.toLowerCase(),
         condition: elements.filterConditionSelect.value.toLowerCase(),
         language: elements.filterLanguageSelect.value.toLowerCase(),
+        color: elements.filterColorSelect.value.toLowerCase(),
         foil: elements.filterFoilSelect.value.toLowerCase(),
         cmcOperator: elements.filterCMCOperator.value,
         cmcValue: elements.filterCMCValue.value,
         cardType: elements.filterCardTypeSelect.value.toLowerCase()
     };
+
+    if (hasScryfallDependentFilters(filters)) {
+        await enrichCardsForScryfallFilters(state.allCards);
+    }
 
     state.filteredCards = state.allCards.filter(card => {
         if (filters.name && !(card["Name"] || "").toLowerCase().includes(filters.name)) return false;
@@ -549,6 +1108,7 @@ function applyFilters() {
         if (filters.rarity && (card["Rarity"] || "").toLowerCase() !== filters.rarity) return false;
         if (filters.condition && (card["Condition"] || "").toLowerCase() !== filters.condition) return false;
         if (filters.language && (card["Language"] || "").toLowerCase() !== filters.language) return false;
+        if (!matchesColorFilter(card, filters.color)) return false;
         if (filters.foil && (card["Foil"] || "").toLowerCase() !== filters.foil) return false;
 
         if (filters.cmcOperator && filters.cmcValue) {
@@ -758,12 +1318,64 @@ function setupScryfallObserver(cards) {
 async function enrichVisibleCards() {
     setStatus("Scryfall: enriching visible");
     const cardElements = Array.from(document.querySelectorAll(".card-item"));
+    const ids = cardElements
+        .map(cardElement => {
+            const cardId = parseInt(cardElement.dataset.cardId, 10);
+            const card = state.displayedCards.find(c => c._id === cardId);
+            return card ? card["Scryfall ID"] : "";
+        })
+        .filter(Boolean);
+
+    await loadBulkLookupForIds(ids, { allowDownload: false });
+
     for (const cardElement of cardElements) {
         const cardId = parseInt(cardElement.dataset.cardId, 10);
         const card = state.displayedCards.find(c => c._id === cardId);
         if (card) await enrichCard(card, cardElement);
     }
     setStatus("Scryfall: idle");
+}
+
+async function updateBulkDataForCurrentCards() {
+    if (!state.allCards || state.allCards.length === 0) {
+        showInfoDialog({
+            title: "Bulk Data Update",
+            message: "Load a CSV first so cards can be indexed from default cards bulk data."
+        });
+        return;
+    }
+
+    const ids = state.allCards.map(card => card["Scryfall ID"]).filter(Boolean);
+    if (ids.length === 0) {
+        showInfoDialog({
+            title: "Bulk Data Update",
+            message: "No Scryfall IDs found in the loaded CSV."
+        });
+        return;
+    }
+
+    await refreshBulkMetaStatus();
+    await loadBulkLookupForIds(ids, { forceUpdate: true });
+
+    const missingIds = await getBulkMissingIdsForVersion(ids, state.bulkLocalUpdatedAt);
+
+    if (hasScryfallDependentFilters({
+        cmcOperator: elements.filterCMCOperator.value,
+        cmcValue: elements.filterCMCValue.value,
+        cardType: elements.filterCardTypeSelect.value,
+        color: elements.filterColorSelect.value
+    })) {
+        await applyFilters();
+    }
+
+    if (missingIds.length > 0) {
+        showMissingCardsDialog(missingIds);
+    } else {
+        showInfoDialog({
+            title: "Bulk Data Update",
+            message: "Bulk data updated for the currently loaded cards."
+        });
+    }
 }
 
 function resetFilters() {
@@ -773,6 +1385,7 @@ function resetFilters() {
     elements.filterRaritySelect.value = "";
     elements.filterConditionSelect.value = "";
     elements.filterLanguageSelect.value = "";
+    elements.filterColorSelect.value = "";
     elements.filterFoilSelect.value = "";
     elements.filterCMCOperator.value = "";
     elements.filterCMCValue.value = "";
@@ -803,6 +1416,7 @@ function getCurrentFilterState() {
             rarity: elements.filterRaritySelect.value,
             condition: elements.filterConditionSelect.value,
             language: elements.filterLanguageSelect.value,
+            color: elements.filterColorSelect.value,
             foil: elements.filterFoilSelect.value,
             cmcOperator: elements.filterCMCOperator.value,
             cmcValue: elements.filterCMCValue.value,
@@ -840,7 +1454,10 @@ function saveCurrentConfig() {
     localStorage.setItem("mtg_filter_configs", JSON.stringify(configs));
     loadSavedConfigs();
     elements.savedConfigsSelect.value = name.trim();
-    alert(`Configuration "${name.trim()}" saved.`);
+    showInfoDialog({
+        title: "Saved Configuration",
+        message: `Configuration "${name.trim()}" saved.`
+    });
 }
 
 function loadSelectedConfig() {
@@ -857,6 +1474,7 @@ function loadSelectedConfig() {
     elements.filterRaritySelect.value = config.filters.rarity || "";
     elements.filterConditionSelect.value = config.filters.condition || "";
     elements.filterLanguageSelect.value = config.filters.language || "";
+    elements.filterColorSelect.value = config.filters.color || "";
     elements.filterFoilSelect.value = config.filters.foil || "";
     elements.filterCMCOperator.value = config.filters.cmcOperator || "";
     elements.filterCMCValue.value = config.filters.cmcValue || "";
@@ -968,6 +1586,19 @@ function attachEventListeners() {
     elements.resetFiltersBtn.addEventListener("click", resetFilters);
     elements.toggleDetailsBtn.addEventListener("click", toggleDetails);
     elements.enrichVisibleBtn.addEventListener("click", enrichVisibleCards);
+    elements.updateBulkDataBtn.addEventListener("click", updateBulkDataForCurrentCards);
+
+    if (elements.infoDialogClose) {
+        elements.infoDialogClose.addEventListener("click", closeInfoDialog);
+    }
+
+    if (elements.infoDialog) {
+        elements.infoDialog.addEventListener("click", event => {
+            if (event.target === elements.infoDialog) {
+                closeInfoDialog();
+            }
+        });
+    }
 }
 
 async function handleFile(file) {
@@ -976,7 +1607,13 @@ async function handleFile(file) {
     state.allCards = parseCSV(text);
     state.filteredCards = [...state.allCards];
     state.displayedCards = [...state.allCards];
-    elements.fileStatus.textContent = `Loaded: ${file.name} (${state.allCards.length} cards)`;
+    const totalQuantity = state.allCards.reduce((sum, card) => sum + (parseInt(card["Quantity"], 10) || 0), 0);
+    elements.fileStatus.textContent = `Loaded: ${file.name} (${state.allCards.length} entries, ${totalQuantity} cards)`;
+
+    const csvScryfallIds = state.allCards.map(card => card["Scryfall ID"]).filter(Boolean);
+    if (state.bulkLocalUpdatedAt && csvScryfallIds.length > 0) {
+        await loadBulkLookupForIds(csvScryfallIds, { allowDownload: true, onlyIfMissing: true });
+    }
 
     loadFilterOptions(state.allCards);
     renderCards(state.allCards);
@@ -984,7 +1621,14 @@ async function handleFile(file) {
 }
 
 async function init() {
+    elements.infoDialog = document.getElementById("info-dialog");
+    elements.infoDialogTitle = document.getElementById("info-dialog-title");
+    elements.infoDialogBody = document.getElementById("info-dialog-body");
+    elements.infoDialogClose = document.getElementById("info-dialog-close");
+    closeInfoDialog();
+
     state.scryfallCache = await openScryfallCache();
+    await refreshBulkMetaStatus();
     loadSavedConfigs();
     loadCardTypesCatalog();
     attachEventListeners();

@@ -34,6 +34,14 @@
                         <input id="csv-file" type="file" accept=".csv" />
                     </div>
                     <div class="file-status" id="file-status">No file loaded</div>
+                    <div class="file-status" id="bulk-status">Bulk data: unknown</div>
+                    <button id="update-bulk-data" class="ghost-btn" type="button">Update bulk data</button>
+                    <div id="bulk-progress" class="bulk-progress hidden" aria-live="polite">
+                        <div class="bulk-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                            <div id="bulk-progress-bar" class="bulk-progress-bar"></div>
+                        </div>
+                        <div id="bulk-progress-text" class="file-status bulk-progress-text">Bulk download: idle</div>
+                    </div>
                 </section>
 
                 <section class="panel">
@@ -76,6 +84,21 @@
                         <label for="filter-language">Language</label>
                         <select id="filter-language" class="filter-select">
                             <option value="">All Languages</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="filter-color">Color</label>
+                        <select id="filter-color" class="filter-select">
+                            <option value="">All Colors</option>
+                            <option value="w">White</option>
+                            <option value="u">Blue</option>
+                            <option value="b">Black</option>
+                            <option value="r">Red</option>
+                            <option value="g">Green</option>
+                            <option value="multicolored">Multicolored</option>
+                            <option value="monocolored">Monocolored</option>
+                            <option value="colorless">Colorless</option>
                         </select>
                     </div>
 
@@ -152,5 +175,17 @@
     </div>
 
     <script src="assets/js/app.js"></script>
+
+    <div id="info-dialog" class="dialog-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="info-dialog-title">
+        <div class="dialog-card">
+            <div class="dialog-header">
+                <h3 id="info-dialog-title">Information</h3>
+            </div>
+            <div id="info-dialog-body" class="dialog-body"></div>
+            <div class="dialog-actions">
+                <button id="info-dialog-close" class="primary-btn" type="button">OK</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

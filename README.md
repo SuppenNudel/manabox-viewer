@@ -11,10 +11,12 @@ Pure client-side version of the ManaBox card viewer. It runs entirely in the bro
 ## Scryfall enrichment
 
 - Card data is fetched on demand from Scryfall as cards appear on screen.
+- The app uses Scryfall `bulk-data/default_cards` as the primary source for loaded collection cards.
+- The current bulk dataset timestamp is shown in the sidebar, and you can trigger an update when a newer version is available.
 - Results are cached in IndexedDB, so repeat visits are faster.
 - Use the "Enrich visible" button to fetch data for the currently visible cards.
 
 ## Notes
 
-- Filters that rely on Scryfall data (format legality, card types, CMC) will only work for cards that have been enriched.
+- Filters that rely on Scryfall data (format legality, card types, CMC, color) will only work for cards that have been enriched.
 - If your browser blocks local file access, serve the folder with a simple local server.
