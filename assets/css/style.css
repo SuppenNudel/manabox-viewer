@@ -372,6 +372,24 @@ body {
     gap: 0.4rem;
 }
 
+#filter-color-mode {
+    margin-top: 0.55rem;
+}
+
+#filter-color-count {
+    margin-top: 0;
+}
+
+.filter-group .grid-2:has(#filter-color-count-operator) {
+    margin-top: 0.45rem;
+}
+
+#filter-color-mode,
+#filter-color-count-operator,
+#filter-color-count {
+    min-height: 38px;
+}
+
 .color-filter-btn {
     border: 1px solid #d7c9bb;
     border-radius: 999px;

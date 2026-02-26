@@ -123,6 +123,8 @@ const elements = {
     filterLanguageSelect: document.getElementById("filter-language"),
     filterColorButtons: document.getElementById("filter-color-buttons"),
     filterColorModeSelect: document.getElementById("filter-color-mode"),
+    filterColorCountOperatorSelect: document.getElementById("filter-color-count-operator"),
+    filterColorCountSelect: document.getElementById("filter-color-count"),
     filterFoilSelect: document.getElementById("filter-foil"),
     filterCMCOperator: document.getElementById("filter-cmc-operator"),
     filterCMCValue: document.getElementById("filter-cmc-value"),
@@ -260,6 +262,16 @@ function getSelectedColorFilters() {
 
 function getSelectedColorMode() {
     return elements.filterColorModeSelect ? elements.filterColorModeSelect.value : "includes";
+}
+
+function getSelectedColorCount() {
+    if (!elements.filterColorCountSelect) return "";
+    return elements.filterColorCountSelect.value;
+}
+
+function getSelectedColorCountOperator() {
+    if (!elements.filterColorCountOperatorSelect) return "";
+    return elements.filterColorCountOperatorSelect.value;
 }
 
 function setSelectedColorFilters(selectedColors) {
@@ -1381,6 +1393,25 @@ function getCardColors(card) {
     return sourceColors.map(color => String(color).toLowerCase());
 }
 
+function matchesColorCountFilter(card, colorCountOperator, colorCountFilter) {
+    if (!colorCountOperator || colorCountFilter === "") return true;
+    const colors = getCardColors(card);
+    if (colors === null) return false;
+    const target = parseInt(colorCountFilter, 10);
+    if (Number.isNaN(target)) return true;
+
+    const actual = colors.length;
+    switch (colorCountOperator) {
+        case "=": return actual === target;
+        case "!=": return actual !== target;
+        case "<": return actual < target;
+        case "<=": return actual <= target;
+        case ">": return actual > target;
+        case ">=": return actual >= target;
+        default: return true;
+    }
+}
+
 function matchesColorFilter(card, colorFilters, colorMode) {
     if (!colorFilters || colorFilters.length === 0) return true;
 
@@ -1406,8 +1437,9 @@ function hasScryfallDependentFilters(filters) {
     const hasCmcFilter = Boolean(filters.cmcOperator && filters.cmcValue);
     const hasCardTypeFilter = Boolean(filters.cardType);
     const hasColorFilter = Array.isArray(filters.color) && filters.color.length > 0;
+    const hasColorCountFilter = Boolean(filters.colorCountOperator && filters.colorCount !== "");
     const hasFormatFilter = state.formatFilters.some(filter => filter.format);
-    return hasCmcFilter || hasCardTypeFilter || hasColorFilter || hasFormatFilter;
+    return hasCmcFilter || hasCardTypeFilter || hasColorFilter || hasColorCountFilter || hasFormatFilter;
 }
 
 async function enrichCardsForScryfallFilters(cards) {
@@ -1441,6 +1473,8 @@ async function applyFilters() {
         language: elements.filterLanguageSelect.value.toLowerCase(),
         color: getSelectedColorFilters(),
         colorMode: getSelectedColorMode(),
+        colorCountOperator: getSelectedColorCountOperator(),
+        colorCount: getSelectedColorCount(),
         foil: elements.filterFoilSelect.value.toLowerCase(),
         cmcOperator: elements.filterCMCOperator.value,
         cmcValue: elements.filterCMCValue.value,
@@ -1459,6 +1493,7 @@ async function applyFilters() {
         if (filters.condition && card._filterCondition !== filters.condition) return false;
         if (filters.language && card._filterLanguage !== filters.language) return false;
         if (!matchesColorFilter(card, filters.color, filters.colorMode)) return false;
+        if (!matchesColorCountFilter(card, filters.colorCountOperator, filters.colorCount)) return false;
         if (filters.foil && card._filterFoil !== filters.foil) return false;
 
         if (filters.cmcOperator && filters.cmcValue) {
@@ -1715,7 +1750,8 @@ async function updateBulkDataForCurrentCards() {
         cmcOperator: elements.filterCMCOperator.value,
         cmcValue: elements.filterCMCValue.value,
         cardType: elements.filterCardTypeSelect.value,
-        color: getSelectedColorFilters()
+        color: getSelectedColorFilters(),
+        colorCount: getSelectedColorCount(),
     })) {
         await applyFilters();
     }
@@ -1740,6 +1776,12 @@ function resetFilters() {
     setSelectedColorFilters([]);
     if (elements.filterColorModeSelect) {
         elements.filterColorModeSelect.value = "includes";
+    }
+    if (elements.filterColorCountOperatorSelect) {
+        elements.filterColorCountOperatorSelect.value = "";
+    }
+    if (elements.filterColorCountSelect) {
+        elements.filterColorCountSelect.value = "";
     }
     elements.filterFoilSelect.value = "";
     elements.filterCMCOperator.value = "";
@@ -1773,6 +1815,8 @@ function getCurrentFilterState() {
             language: elements.filterLanguageSelect.value,
             color: getSelectedColorFilters(),
             colorMode: getSelectedColorMode(),
+            colorCountOperator: getSelectedColorCountOperator(),
+            colorCount: getSelectedColorCount(),
             foil: elements.filterFoilSelect.value,
             cmcOperator: elements.filterCMCOperator.value,
             cmcValue: elements.filterCMCValue.value,
@@ -1850,6 +1894,12 @@ function loadSelectedConfig() {
     }
     if (elements.filterColorModeSelect) {
         elements.filterColorModeSelect.value = config.filters.colorMode || "includes";
+    }
+    if (elements.filterColorCountOperatorSelect) {
+        elements.filterColorCountOperatorSelect.value = config.filters.colorCountOperator || (config.filters.colorCount ? "=" : "");
+    }
+    if (elements.filterColorCountSelect) {
+        elements.filterColorCountSelect.value = config.filters.colorCount || "";
     }
     elements.filterFoilSelect.value = config.filters.foil || "";
     elements.filterCMCOperator.value = config.filters.cmcOperator || "";
@@ -1979,6 +2029,8 @@ function attachEventListeners() {
         elements.filterConditionSelect,
         elements.filterLanguageSelect,
         elements.filterColorModeSelect,
+        elements.filterColorCountOperatorSelect,
+        elements.filterColorCountSelect,
         elements.filterFoilSelect,
         elements.filterCMCOperator,
         elements.filterCardTypeSelect,
