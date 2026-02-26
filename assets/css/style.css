@@ -509,6 +509,25 @@ body {
     box-shadow: var(--shadow);
 }
 
+.cards-info-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.download-format-select {
+    width: auto;
+    min-width: 155px;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.82rem;
+}
+
+.download-list-btn {
+    width: auto;
+    margin-top: 0;
+    padding: 0.45rem 0.75rem;
+}
+
 .cards-grid {
     display: grid;
     gap: 0.75rem;
@@ -579,6 +598,12 @@ body {
 .card-subtitle {
     font-size: 0.85rem;
     color: var(--ink-soft);
+}
+
+.set-icon {
+    margin-left: 0.25rem;
+    vertical-align: -0.08em;
+    line-height: 1;
 }
 
 .card-metadata {
@@ -725,6 +750,16 @@ body {
         flex-direction: column;
         align-items: flex-start;
         gap: 0.8rem;
+    }
+
+    .cards-info {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .cards-info-actions {
+        width: 100%;
+        flex-wrap: wrap;
     }
 
     .card-item {

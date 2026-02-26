@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/keyrune@latest/css/keyrune.min.css">
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="assets/css/condition.css">
 </head>
@@ -185,8 +186,15 @@
 
             <main class="card-list">
                 <div class="cards-info">
-                    <span>Total cards: <strong id="card-count">0</strong></span>
-                    <span id="enrich-status" class="status-chip">Scryfall: idle</span>
+                    <span>Filtered: <strong id="entry-count">0</strong> entries, <strong id="card-count">0</strong> cards</span>
+                    <div class="cards-info-actions">
+                        <select id="download-format" class="filter-select download-format-select" aria-label="Download format">
+                            <option value="csv">ManaBox CSV</option>
+                            <option value="txt">Decklist TXT</option>
+                        </select>
+                        <button id="download-list" class="ghost-btn download-list-btn" type="button">Download</button>
+                        <span id="enrich-status" class="status-chip">Scryfall: idle</span>
+                    </div>
                 </div>
                 <div id="cards-container" class="cards-grid">
                     <div class="loading">Load your CSV to begin.</div>

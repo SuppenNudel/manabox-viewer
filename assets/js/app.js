@@ -139,7 +139,10 @@ const elements = {
     applyFiltersBtn: document.getElementById("apply-filters"),
     resetFiltersBtn: document.getElementById("reset-filters"),
     cardsContainer: document.getElementById("cards-container"),
+    entryCountSpan: document.getElementById("entry-count"),
     cardCountSpan: document.getElementById("card-count"),
+    downloadFormatSelect: document.getElementById("download-format"),
+    downloadListBtn: document.getElementById("download-list"),
     toggleDetailsBtn: document.getElementById("toggle-details"),
     enrichVisibleBtn: document.getElementById("enrich-visible"),
     enrichStatus: document.getElementById("enrich-status")
@@ -652,6 +655,101 @@ function parseCSV(text) {
             record._id = index + 1;
             return record;
         });
+}
+
+function getExportCards() {
+    if (Array.isArray(state.displayedCards) && state.displayedCards.length > 0) {
+        return state.displayedCards;
+    }
+    if (Array.isArray(state.filteredCards) && state.filteredCards.length > 0) {
+        return state.filteredCards;
+    }
+    return Array.isArray(state.allCards) ? state.allCards : [];
+}
+
+function getExportHeaders(cards) {
+    if (!cards || cards.length === 0) return [];
+    const excludedHeaders = new Set(["Binder Name", "Binder Type"]);
+    return Object.keys(cards[0]).filter(key => !key.startsWith("_") && !excludedHeaders.has(key));
+}
+
+function escapeCsvValue(value) {
+    const text = value === undefined || value === null ? "" : String(value);
+    if (/[",\r\n]/.test(text)) {
+        return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+}
+
+function buildManaboxCsv(cards) {
+    const headers = getExportHeaders(cards);
+    if (headers.length === 0) return "";
+
+    const lines = [headers.map(escapeCsvValue).join(",")];
+    cards.forEach(card => {
+        const row = headers.map(header => escapeCsvValue(card[header]));
+        lines.push(row.join(","));
+    });
+
+    return lines.join("\r\n");
+}
+
+function buildDecklistTxt(cards) {
+    return cards
+        .map(card => {
+            const quantity = parseInt(card["Quantity"], 10) || 0;
+            const name = card["Name"] || "Unknown Card";
+            return `${quantity} ${name}`;
+        })
+        .join("\r\n");
+}
+
+function triggerFileDownload(filename, content, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+
+    URL.revokeObjectURL(url);
+}
+
+function getTimestampForFilename() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    const seconds = String(now.getSeconds()).padStart(2, "0");
+    return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+}
+
+function downloadCurrentList() {
+    const cards = getExportCards();
+    if (cards.length === 0) {
+        showInfoDialog({
+            title: "Download List",
+            message: "No cards available to export. Load a CSV first."
+        });
+        return;
+    }
+
+    const format = elements.downloadFormatSelect ? elements.downloadFormatSelect.value : "csv";
+    const timestamp = getTimestampForFilename();
+
+    if (format === "txt") {
+        const txtContent = buildDecklistTxt(cards);
+        triggerFileDownload(`decklist_${timestamp}.txt`, txtContent, "text/plain;charset=utf-8");
+        return;
+    }
+
+    const csvContent = buildManaboxCsv(cards);
+    triggerFileDownload(`manabox_export_${timestamp}.csv`, `\uFEFF${csvContent}`, "text/csv;charset=utf-8");
 }
 
 function normalizeLanguage(value) {
@@ -1571,6 +1669,9 @@ async function applyFilters() {
 }
 
 function renderCards(cards) {
+    if (elements.entryCountSpan) {
+        elements.entryCountSpan.textContent = cards.length;
+    }
     const totalQuantity = cards.reduce((sum, card) => sum + (parseInt(card["Quantity"], 10) || 0), 0);
     elements.cardCountSpan.textContent = totalQuantity;
 
@@ -1609,8 +1710,16 @@ function createCardElement(card) {
     const displayName = card._displayName || card["Name"] || "";
     const setName = card["Set name"] || "";
     const setCode = card["Set code"] || "";
+    const setCodeSlug = String(setCode).toLowerCase().replace(/[^a-z0-9]/g, "");
     const rarityKey = (card["Rarity"] || "").toLowerCase();
     const rarityIcon = RARITY_ICONS[rarityKey] || { icon: "?", label: card["Rarity"] || "Unknown" };
+    const keyruneRarityClassMap = {
+        common: "ss-common",
+        uncommon: "ss-uncommon",
+        rare: "ss-rare",
+        mythic: "ss-mythic"
+    };
+    const keyruneRarityClass = keyruneRarityClassMap[rarityKey] || "ss-common";
     const conditionKey = (card["Condition"] || "").toLowerCase().replace(/\s+/g, "_");
     const conditionData = CONDITION_CODE_MAP[conditionKey] || { code: "un", label: card["Condition"] || "Unknown" };
     const languageKey = normalizeLanguage(card["Language"] || "");
@@ -1643,7 +1752,7 @@ function createCardElement(card) {
             <div class="card-content">
                 <div>
                     <div class="card-title"><span class="card-quantity">${escapeHtml(card["Quantity"] || "0")}x</span> ${escapeHtml(displayName)}</div>
-                    <div class="card-subtitle">${escapeHtml(setName)} (${escapeHtml(setCode)})</div>
+                    <div class="card-subtitle">${escapeHtml(setCode)}${setCodeSlug ? ` <i class="ss ss-${setCodeSlug} ${keyruneRarityClass} set-icon" title="${escapeHtml(setCode)}"></i>` : ""} ${escapeHtml(setName)}</div>
                 </div>
 
                 <div class="card-metadata">
@@ -2098,6 +2207,9 @@ function attachEventListeners() {
     elements.toggleDetailsBtn.addEventListener("click", toggleDetails);
     elements.enrichVisibleBtn.addEventListener("click", enrichVisibleCards);
     elements.updateBulkDataBtn.addEventListener("click", updateBulkDataForCurrentCards);
+    if (elements.downloadListBtn) {
+        elements.downloadListBtn.addEventListener("click", downloadCurrentList);
+    }
     if (elements.filterColorButtons) {
         elements.filterColorButtons.addEventListener("click", event => {
             const button = event.target.closest(".color-filter-btn");
