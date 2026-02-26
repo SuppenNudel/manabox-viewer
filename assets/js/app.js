@@ -50,14 +50,16 @@ const RARITY_LABELS = {
     "common": "C",
     "uncommon": "U",
     "rare": "R",
-    "mythic": "M"
+    "mythic": "M",
+    "special": "S"
 };
 
 const RARITY_ICONS = {
     "common": { icon: "⚫", label: "Common" },
     "uncommon": { icon: "⚪", label: "Uncommon" },
     "rare": { icon: "🟡", label: "Rare" },
-    "mythic": { icon: "🔴", label: "Mythic" }
+    "mythic": { icon: "🔴", label: "Mythic" },
+    "special": { icon: "🟣", label: "Special" }
 };
 
 const LANGUAGE_ICONS = {
@@ -223,7 +225,7 @@ function buildColorRankMap(sequence) {
 }
 
 const TWO_COLOR_RANK = buildColorRankMap(["wu", "ub", "br", "rg", "gw", "wb", "ur", "bg", "rw", "gu"]);
-const THREE_COLOR_RANK = buildColorRankMap(["gwu", "wub", "ubr", "brg", "rgw", "wbg", "urw", "bgu", "rwb", "wur"]);
+const THREE_COLOR_RANK = buildColorRankMap(["gwu", "wub", "ubr", "brg", "rgw", "wbg", "urw", "bgu", "rwb", "gur"]);
 const FOUR_COLOR_RANK = buildColorRankMap(["wubr", "ubrg", "brgw", "rgwu", "gwub"]);
 
 function setStatus(text) {
@@ -252,9 +254,19 @@ function getRarityLabel(value) {
         common: "Common",
         uncommon: "Uncommon",
         rare: "Rare",
-        mythic: "Mythic"
+        mythic: "Mythic",
+        special: "Special"
     };
     return labels[key] || toDisplayLabel(value);
+}
+
+function getRarityLabelWithIcon(value) {
+    const key = String(value || "").toLowerCase();
+    const rarityData = RARITY_ICONS[key];
+    if (rarityData) {
+        return `${rarityData.icon} ${rarityData.label}`;
+    }
+    return getRarityLabel(value);
 }
 
 function getConditionLabel(value) {
@@ -262,13 +274,45 @@ function getConditionLabel(value) {
     return CONDITION_CODE_MAP[key] ? CONDITION_CODE_MAP[key].label : toDisplayLabel(value);
 }
 
+function getConditionLabelWithIcon(value) {
+    const key = String(value || "").toLowerCase().replace(/\s+/g, "_");
+    const condition = CONDITION_CODE_MAP[key];
+    if (condition) {
+        return `${condition.code.toUpperCase()} ${condition.label}`;
+    }
+    return getConditionLabel(value);
+}
+
 function getLanguageLabel(value) {
     const key = normalizeLanguage(String(value || ""));
     return LANGUAGE_LABELS[key] || toDisplayLabel(value);
 }
 
+function getLanguageLabelWithIcon(value) {
+    const key = normalizeLanguage(String(value || ""));
+    const iconData = LANGUAGE_ICONS[key];
+    const icon = iconData ? iconData.icon : "🌐";
+    return `${icon} ${getLanguageLabel(value)}`;
+}
+
 function getCardTypeLabel(value) {
     return toDisplayLabel(value);
+}
+
+function getCardTypeLabelWithIcon(value) {
+    const key = String(value || "").toLowerCase();
+    const iconMap = {
+        creature: "🐾",
+        planeswalker: "✶",
+        artifact: "🏆",
+        instant: "⚡",
+        sorcery: "🔥",
+        enchantment: "🌅",
+        land: "⛰️",
+        battle: "🛡️"
+    };
+    const icon = iconMap[key] || "🃏";
+    return `${icon} ${getCardTypeLabel(value)}`;
 }
 
 function initializeColorFilterButtons() {
@@ -1277,7 +1321,7 @@ function loadFilterOptions(cards) {
 
     buildSelectOptions(elements.filterBinderNameSelect, Array.from(binderNames).sort());
     buildSelectOptions(elements.filterBinderTypeSelect, Array.from(binderTypes).sort(), toDisplayLabel);
-    buildSelectOptions(elements.filterRaritySelect, Array.from(rarities).sort(), getRarityLabel);
+    buildSelectOptions(elements.filterRaritySelect, Array.from(rarities).sort(), getRarityLabelWithIcon);
 
     const conditionOrder = {
         mint: 1,
@@ -1298,8 +1342,8 @@ function loadFilterOptions(cards) {
         return getConditionLabel(a).localeCompare(getConditionLabel(b));
     });
 
-    buildSelectOptions(elements.filterConditionSelect, sortedConditions, getConditionLabel);
-    buildSelectOptions(elements.filterLanguageSelect, Array.from(languages).sort(), getLanguageLabel);
+    buildSelectOptions(elements.filterConditionSelect, sortedConditions, getConditionLabelWithIcon);
+    buildSelectOptions(elements.filterLanguageSelect, Array.from(languages).sort(), getLanguageLabelWithIcon);
 }
 
 async function loadCardTypesCatalog() {
@@ -2198,6 +2242,7 @@ function attachEventListeners() {
     if (elements.filterCMCValue) {
         elements.filterCMCValue.addEventListener("input", () => scheduleApplyFilters());
     }
+
     elements.addFormatFilterBtn.addEventListener("click", addFormatFilter);
     elements.addSortCriteriaBtn.addEventListener("click", addSortCriteria);
     elements.saveConfigBtn.addEventListener("click", saveCurrentConfig);
