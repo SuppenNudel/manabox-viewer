@@ -1221,6 +1221,12 @@ function createFormatFilterRow(filterId) {
     row.className = "format-filter-row";
     row.dataset.filterId = filterId;
 
+    const sortedFormats = [...state.availableFormats].sort((a, b) => {
+        const labelA = getFormatLabel(a).toLowerCase();
+        const labelB = getFormatLabel(b).toLowerCase();
+        return labelA.localeCompare(labelB);
+    });
+
     row.innerHTML = `
         <select class="filter-connector" data-filter-id="${filterId}">
             <option value="and">AND</option>
@@ -1233,7 +1239,7 @@ function createFormatFilterRow(filterId) {
         </select>
         <select class="filter-format-select" data-filter-id="${filterId}">
             <option value="">Select format</option>
-            ${state.availableFormats.map(fmt => `<option value="${fmt}">${getFormatLabel(fmt)}</option>`).join("")}
+            ${sortedFormats.map(fmt => `<option value="${fmt}">${getFormatLabel(fmt)}</option>`).join("")}
         </select>
         <button class="remove-format-filter" data-filter-id="${filterId}" type="button">x</button>
     `;
