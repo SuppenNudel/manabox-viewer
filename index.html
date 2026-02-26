@@ -18,6 +18,13 @@
                 <p class="subtitle">Client-side viewer for your collection CSV</p>
             </div>
             <div class="topbar-actions">
+                <div class="legality-menu-wrap">
+                    <button id="legality-menu-toggle" class="ghost-btn" type="button">☰ Legality</button>
+                    <div id="legality-menu" class="legality-menu hidden">
+                        <div class="legality-menu-title">Shown Legality Formats</div>
+                        <div id="legality-display-list" class="legality-display-list"></div>
+                    </div>
+                </div>
                 <button id="toggle-details" class="toggle-btn active" type="button">Details</button>
                 <button id="enrich-visible" class="ghost-btn" type="button">Enrich visible</button>
             </div>
@@ -88,17 +95,12 @@
                     </div>
 
                     <div class="filter-group">
-                        <label for="filter-color">Color</label>
-                        <select id="filter-color" class="filter-select">
-                            <option value="">All Colors</option>
-                            <option value="w">White</option>
-                            <option value="u">Blue</option>
-                            <option value="b">Black</option>
-                            <option value="r">Red</option>
-                            <option value="g">Green</option>
-                            <option value="multicolored">Multicolored</option>
-                            <option value="monocolored">Monocolored</option>
-                            <option value="colorless">Colorless</option>
+                        <label>Color</label>
+                        <div id="filter-color-buttons" class="color-filter-buttons"></div>
+                        <select id="filter-color-mode" class="filter-select">
+                            <option value="includes">Including these colors</option>
+                            <option value="exact">Exactly these colors</option>
+                            <option value="at-most">At most these colors</option>
                         </select>
                     </div>
 
@@ -157,7 +159,6 @@
                         </div>
                     </div>
 
-                    <button id="apply-filters" class="primary-btn" type="button">Apply Filters</button>
                     <button id="reset-filters" class="danger-btn" type="button">Reset Filters</button>
                 </section>
             </aside>
@@ -183,6 +184,7 @@
             </div>
             <div id="info-dialog-body" class="dialog-body"></div>
             <div class="dialog-actions">
+                <button id="info-dialog-cancel" class="ghost-btn hidden" type="button">Cancel</button>
                 <button id="info-dialog-close" class="primary-btn" type="button">OK</button>
             </div>
         </div>

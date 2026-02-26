@@ -17,8 +17,8 @@ const state = {
     availableFormats: [
         "standard", "future", "historic", "gladiator", "pioneer", "modern",
         "legacy", "pauper", "vintage", "penny", "commander", "oathbreaker",
-        "brawl", "historicbrawl", "alchemy", "paupercommander", "duel",
-        "oldschool", "premodern"
+        "brawl", "standardbrawl", "historicbrawl", "alchemy", "timeless",
+        "paupercommander", "duel", "predh", "oldschool", "premodern"
     ]
 };
 
@@ -107,9 +107,13 @@ const elements = {
     bulkProgress: document.getElementById("bulk-progress"),
     bulkProgressBar: document.getElementById("bulk-progress-bar"),
     bulkProgressText: document.getElementById("bulk-progress-text"),
+    legalityMenuToggle: document.getElementById("legality-menu-toggle"),
+    legalityMenu: document.getElementById("legality-menu"),
+    legalityDisplayList: document.getElementById("legality-display-list"),
     infoDialog: document.getElementById("info-dialog"),
     infoDialogTitle: document.getElementById("info-dialog-title"),
     infoDialogBody: document.getElementById("info-dialog-body"),
+    infoDialogCancel: document.getElementById("info-dialog-cancel"),
     infoDialogClose: document.getElementById("info-dialog-close"),
     searchNameInput: document.getElementById("search-name"),
     filterBinderNameSelect: document.getElementById("filter-binder-name"),
@@ -117,7 +121,8 @@ const elements = {
     filterRaritySelect: document.getElementById("filter-rarity"),
     filterConditionSelect: document.getElementById("filter-condition"),
     filterLanguageSelect: document.getElementById("filter-language"),
-    filterColorSelect: document.getElementById("filter-color"),
+    filterColorButtons: document.getElementById("filter-color-buttons"),
+    filterColorModeSelect: document.getElementById("filter-color-mode"),
     filterFoilSelect: document.getElementById("filter-foil"),
     filterCMCOperator: document.getElementById("filter-cmc-operator"),
     filterCMCValue: document.getElementById("filter-cmc-value"),
@@ -140,20 +145,204 @@ const elements = {
 
 const SCRYFALL_DEFAULT_CARDS_META_URL = "https://api.scryfall.com/bulk-data/default_cards";
 const META_BULK_DEFAULT_CARDS_UPDATED_AT_KEY = "bulk_default_cards_updated_at";
+const LEGALITY_DISPLAY_SETTINGS_KEY = "mtg_legality_display_settings";
+
+const dialogState = {
+    resolver: null,
+    mode: "info"
+};
+
+let applyFiltersDebounceTimer = null;
+
+function scheduleApplyFilters(delay = 120) {
+    if (applyFiltersDebounceTimer) {
+        clearTimeout(applyFiltersDebounceTimer);
+    }
+
+    applyFiltersDebounceTimer = setTimeout(() => {
+        applyFiltersDebounceTimer = null;
+        applyFilters();
+    }, delay);
+}
+
+const FORMAT_LABELS = {
+    standard: "Standard",
+    future: "Future",
+    historic: "Historic",
+    gladiator: "Gladiator",
+    pioneer: "Pioneer",
+    modern: "Modern",
+    legacy: "Legacy",
+    pauper: "Pauper",
+    vintage: "Vintage",
+    penny: "Penny",
+    commander: "Commander",
+    oathbreaker: "Oathbreaker",
+    brawl: "Brawl",
+    standardbrawl: "Standard Brawl",
+    historicbrawl: "Historic Brawl",
+    alchemy: "Alchemy",
+    timeless: "Timeless",
+    paupercommander: "Pauper Commander",
+    duel: "Duel Commander",
+    predh: "preDH",
+    oldschool: "Old School",
+    premodern: "Premodern"
+};
+
+const COLOR_FILTER_OPTIONS = [
+    { value: "w", label: "W", className: "color-w" },
+    { value: "u", label: "U", className: "color-u" },
+    { value: "b", label: "B", className: "color-b" },
+    { value: "r", label: "R", className: "color-r" },
+    { value: "g", label: "G", className: "color-g" }
+];
 
 function setStatus(text) {
     elements.enrichStatus.textContent = text;
 }
 
+function getFormatLabel(formatKey) {
+    if (!formatKey) return "";
+    return FORMAT_LABELS[formatKey] || formatKey;
+}
+
+function toDisplayLabel(value) {
+    if (!value) return "";
+    return String(value)
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .split(" ")
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join(" ");
+}
+
+function getRarityLabel(value) {
+    const key = String(value || "").toLowerCase();
+    const labels = {
+        common: "Common",
+        uncommon: "Uncommon",
+        rare: "Rare",
+        mythic: "Mythic"
+    };
+    return labels[key] || toDisplayLabel(value);
+}
+
+function getConditionLabel(value) {
+    const key = String(value || "").toLowerCase().replace(/\s+/g, "_");
+    return CONDITION_CODE_MAP[key] ? CONDITION_CODE_MAP[key].label : toDisplayLabel(value);
+}
+
+function getLanguageLabel(value) {
+    const key = normalizeLanguage(String(value || ""));
+    return LANGUAGE_LABELS[key] || toDisplayLabel(value);
+}
+
+function getCardTypeLabel(value) {
+    return toDisplayLabel(value);
+}
+
+function initializeColorFilterButtons() {
+    if (!elements.filterColorButtons) return;
+
+    elements.filterColorButtons.innerHTML = COLOR_FILTER_OPTIONS
+        .map(color => `<button type="button" class="color-filter-btn ${color.className}" data-color="${color.value}">${color.label}</button>`)
+        .join("");
+}
+
+function getSelectedColorFilters() {
+    if (!elements.filterColorButtons) return [];
+    return Array.from(elements.filterColorButtons.querySelectorAll(".color-filter-btn.active"))
+        .map(button => button.dataset.color)
+        .filter(Boolean);
+}
+
+function getSelectedColorMode() {
+    return elements.filterColorModeSelect ? elements.filterColorModeSelect.value : "includes";
+}
+
+function setSelectedColorFilters(selectedColors) {
+    if (!elements.filterColorButtons) return;
+    const selected = new Set((selectedColors || []).map(color => String(color).toLowerCase()));
+    Array.from(elements.filterColorButtons.querySelectorAll(".color-filter-btn")).forEach(button => {
+        button.classList.toggle("active", selected.has(String(button.dataset.color).toLowerCase()));
+    });
+}
+
+function getSelectedLegalityDisplayFormats() {
+    if (!elements.legalityDisplayList) return [];
+    return Array.from(elements.legalityDisplayList.querySelectorAll('input[type="checkbox"]:checked'))
+        .map(input => String(input.value).toLowerCase());
+}
+
+function loadLegalityDisplayFormatsOptions() {
+    if (!elements.legalityDisplayList) return;
+
+    const sortedFormats = [...state.availableFormats].sort((a, b) => {
+        const labelA = getFormatLabel(a).toLowerCase();
+        const labelB = getFormatLabel(b).toLowerCase();
+        return labelA.localeCompare(labelB);
+    });
+
+    elements.legalityDisplayList.innerHTML = sortedFormats
+        .map(format => `
+            <label class="legality-checkbox">
+                <input type="checkbox" value="${format}" />
+                <span>${escapeHtml(getFormatLabel(format))}</span>
+            </label>
+        `)
+        .join("");
+}
+
+function saveLegalityDisplaySettings() {
+    const selectedFormats = getSelectedLegalityDisplayFormats();
+    localStorage.setItem(LEGALITY_DISPLAY_SETTINGS_KEY, JSON.stringify({ legalityFormats: selectedFormats }));
+}
+
+function loadLegalityDisplaySettings() {
+    if (!elements.legalityDisplayList) return;
+
+    try {
+        const raw = localStorage.getItem(LEGALITY_DISPLAY_SETTINGS_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        const selected = new Set(Array.isArray(parsed.legalityFormats) ? parsed.legalityFormats : []);
+
+        Array.from(elements.legalityDisplayList.querySelectorAll('input[type="checkbox"]')).forEach(input => {
+            input.checked = selected.has(input.value);
+        });
+    } catch (error) {
+        // Ignore invalid localStorage content.
+    }
+}
+
+function toggleLegalityMenu(forceOpen) {
+    if (!elements.legalityMenu) return;
+    const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : elements.legalityMenu.classList.contains("hidden");
+    elements.legalityMenu.classList.toggle("hidden", !shouldOpen);
+}
+
 function closeInfoDialog() {
     if (!elements.infoDialog) return;
+
+    if (dialogState.resolver) {
+        const resolve = dialogState.resolver;
+        dialogState.resolver = null;
+        dialogState.mode = "info";
+        resolve(null);
+    }
+
     elements.infoDialog.classList.add("hidden");
 }
 
 function showInfoDialog({ title = "Information", message = "", html = "", buttonLabel = "OK" }) {
-    if (!elements.infoDialog || !elements.infoDialogTitle || !elements.infoDialogBody || !elements.infoDialogClose) {
+    if (!elements.infoDialog || !elements.infoDialogTitle || !elements.infoDialogBody || !elements.infoDialogClose || !elements.infoDialogCancel) {
         return;
     }
+
+    dialogState.mode = "info";
+    dialogState.resolver = null;
 
     elements.infoDialogTitle.textContent = title;
     if (html) {
@@ -161,8 +350,82 @@ function showInfoDialog({ title = "Information", message = "", html = "", button
     } else {
         elements.infoDialogBody.innerHTML = `<p>${escapeHtml(message)}</p>`;
     }
+
+    elements.infoDialogCancel.classList.add("hidden");
     elements.infoDialogClose.textContent = buttonLabel;
     elements.infoDialog.classList.remove("hidden");
+}
+
+function showInputDialog({ title = "Input", message = "", confirmLabel = "Save", cancelLabel = "Cancel", value = "", placeholder = "" }) {
+    if (!elements.infoDialog || !elements.infoDialogTitle || !elements.infoDialogBody || !elements.infoDialogClose || !elements.infoDialogCancel) {
+        return Promise.resolve(null);
+    }
+
+    if (dialogState.resolver) {
+        const resolve = dialogState.resolver;
+        dialogState.resolver = null;
+        resolve(null);
+    }
+
+    dialogState.mode = "input";
+    elements.infoDialogTitle.textContent = title;
+    elements.infoDialogBody.innerHTML = `
+        <p>${escapeHtml(message)}</p>
+        <input id="dialog-input" class="dialog-input" type="text" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" />
+    `;
+
+    elements.infoDialogCancel.classList.remove("hidden");
+    elements.infoDialogCancel.textContent = cancelLabel;
+    elements.infoDialogClose.textContent = confirmLabel;
+    elements.infoDialog.classList.remove("hidden");
+
+    const inputEl = elements.infoDialogBody.querySelector("#dialog-input");
+    if (inputEl) {
+        inputEl.focus();
+        inputEl.select();
+        inputEl.addEventListener("keydown", event => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                if (elements.infoDialogClose) elements.infoDialogClose.click();
+            }
+        });
+    }
+
+    return new Promise(resolve => {
+        dialogState.resolver = resolve;
+    });
+}
+
+function handleInfoDialogPrimaryAction() {
+    if (!elements.infoDialog) return;
+
+    if (dialogState.mode === "input" && dialogState.resolver) {
+        const inputEl = elements.infoDialogBody ? elements.infoDialogBody.querySelector("#dialog-input") : null;
+        const value = inputEl ? inputEl.value.trim() : "";
+        const resolve = dialogState.resolver;
+        dialogState.resolver = null;
+        dialogState.mode = "info";
+        elements.infoDialog.classList.add("hidden");
+        resolve(value);
+        return;
+    }
+
+    elements.infoDialog.classList.add("hidden");
+}
+
+function handleInfoDialogCancelAction() {
+    if (!elements.infoDialog) return;
+
+    if (dialogState.resolver) {
+        const resolve = dialogState.resolver;
+        dialogState.resolver = null;
+        dialogState.mode = "info";
+        elements.infoDialog.classList.add("hidden");
+        resolve(null);
+        return;
+    }
+
+    elements.infoDialog.classList.add("hidden");
 }
 
 function formatBytes(bytes) {
@@ -358,6 +621,53 @@ function parseCSV(text) {
 
 function normalizeLanguage(value) {
     return value.toLowerCase().replace("-", "_");
+}
+
+function prepareCardsForFiltering(cards) {
+    cards.forEach(card => {
+        card._filterName = (card["Name"] || "").toLowerCase();
+        card._filterBinderName = (card["Binder Name"] || "").toLowerCase();
+        card._filterBinderType = (card["Binder Type"] || "").toLowerCase();
+        card._filterRarity = (card["Rarity"] || "").toLowerCase();
+        card._filterCondition = (card["Condition"] || "").toLowerCase();
+        card._filterLanguage = (card["Language"] || "").toLowerCase();
+        card._filterFoil = (card["Foil"] || "").toLowerCase();
+    });
+}
+
+function applyScryfallDataToCard(card, scryfallData) {
+    card._scryfall = scryfallData;
+    card._cardTypes = extractCardTypes(scryfallData.type_line || "");
+
+    const printedName = scryfallData.printed_name;
+    card._displayName = printedName && printedName !== scryfallData.name
+        ? `${card["Name"]} (${printedName})`
+        : (card["Name"] || "");
+}
+
+function scheduleBackgroundCardWarmup(cards) {
+    const queue = cards.filter(card => !card._scryfall && card["Scryfall ID"]);
+    if (queue.length === 0) return;
+
+    const runBatch = async () => {
+        const batch = queue.splice(0, 24);
+        if (batch.length === 0) return;
+
+        await Promise.all(batch.map(card => enrichCard(card, null, { cacheOnly: true })));
+
+        if (queue.length === 0) return;
+        if (typeof requestIdleCallback === "function") {
+            requestIdleCallback(() => { runBatch(); }, { timeout: 350 });
+        } else {
+            setTimeout(() => { runBatch(); }, 60);
+        }
+    };
+
+    if (typeof requestIdleCallback === "function") {
+        requestIdleCallback(() => { runBatch(); }, { timeout: 350 });
+    } else {
+        setTimeout(() => { runBatch(); }, 60);
+    }
 }
 
 function escapeHtml(value) {
@@ -651,7 +961,9 @@ async function setCachedScryfall(cardData) {
     });
 }
 
-async function fetchScryfallCard(id) {
+async function fetchScryfallCard(id, options = {}) {
+    const { cacheOnly = false } = options;
+
     if (state.scryfallInFlight.has(id)) return state.scryfallInFlight.get(id);
 
     const cached = await getCachedScryfall(id);
@@ -662,6 +974,8 @@ async function fetchScryfallCard(id) {
         setCachedScryfall(bulkCached);
         return bulkCached;
     }
+
+    if (cacheOnly) return null;
 
     const request = fetch(`https://api.scryfall.com/cards/${id}`)
         .then(response => response.ok ? response.json() : null)
@@ -800,7 +1114,7 @@ async function loadBulkLookupForIds(ids, options = {}) {
     }
 }
 
-function buildSelectOptions(selectEl, values) {
+function buildSelectOptions(selectEl, values, getLabel = value => value) {
     const existing = selectEl.querySelectorAll("option");
     const keep = existing.length > 0 ? existing[0].outerHTML : "";
     selectEl.innerHTML = keep;
@@ -808,7 +1122,7 @@ function buildSelectOptions(selectEl, values) {
     values.forEach(value => {
         const option = document.createElement("option");
         option.value = value;
-        option.textContent = value;
+        option.textContent = getLabel(value);
         selectEl.appendChild(option);
     });
 }
@@ -829,10 +1143,30 @@ function loadFilterOptions(cards) {
     });
 
     buildSelectOptions(elements.filterBinderNameSelect, Array.from(binderNames).sort());
-    buildSelectOptions(elements.filterBinderTypeSelect, Array.from(binderTypes).sort());
-    buildSelectOptions(elements.filterRaritySelect, Array.from(rarities).sort());
-    buildSelectOptions(elements.filterConditionSelect, Array.from(conditions).sort());
-    buildSelectOptions(elements.filterLanguageSelect, Array.from(languages).sort());
+    buildSelectOptions(elements.filterBinderTypeSelect, Array.from(binderTypes).sort(), toDisplayLabel);
+    buildSelectOptions(elements.filterRaritySelect, Array.from(rarities).sort(), getRarityLabel);
+
+    const conditionOrder = {
+        mint: 1,
+        near_mint: 2,
+        excellent: 3,
+        good: 4,
+        light_played: 5,
+        played: 6,
+        poor: 7
+    };
+
+    const sortedConditions = Array.from(conditions).sort((a, b) => {
+        const keyA = String(a || "").toLowerCase().replace(/\s+/g, "_");
+        const keyB = String(b || "").toLowerCase().replace(/\s+/g, "_");
+        const orderA = conditionOrder[keyA] ?? Number.MAX_SAFE_INTEGER;
+        const orderB = conditionOrder[keyB] ?? Number.MAX_SAFE_INTEGER;
+        if (orderA !== orderB) return orderA - orderB;
+        return getConditionLabel(a).localeCompare(getConditionLabel(b));
+    });
+
+    buildSelectOptions(elements.filterConditionSelect, sortedConditions, getConditionLabel);
+    buildSelectOptions(elements.filterLanguageSelect, Array.from(languages).sort(), getLanguageLabel);
 }
 
 async function loadCardTypesCatalog() {
@@ -841,7 +1175,7 @@ async function loadCardTypesCatalog() {
         if (!response.ok) return;
         const data = await response.json();
         const types = (data.data || []).map(t => t.toLowerCase()).sort();
-        buildSelectOptions(elements.filterCardTypeSelect, types);
+        buildSelectOptions(elements.filterCardTypeSelect, types, getCardTypeLabel);
     } catch (error) {
         // Keep default empty if fetch fails.
     }
@@ -864,7 +1198,7 @@ function createFormatFilterRow(filterId) {
         </select>
         <select class="filter-format-select" data-filter-id="${filterId}">
             <option value="">Select format</option>
-            ${state.availableFormats.map(fmt => `<option value="${fmt}">${fmt}</option>`).join("")}
+            ${state.availableFormats.map(fmt => `<option value="${fmt}">${getFormatLabel(fmt)}</option>`).join("")}
         </select>
         <button class="remove-format-filter" data-filter-id="${filterId}" type="button">x</button>
     `;
@@ -882,16 +1216,19 @@ function addFormatFilter() {
     row.querySelector(".filter-connector").addEventListener("change", e => {
         const filter = state.formatFilters.find(f => f.id === filterId);
         if (filter) filter.connector = e.target.value;
+        scheduleApplyFilters();
     });
 
     row.querySelector(".filter-legality-type").addEventListener("change", e => {
         const filter = state.formatFilters.find(f => f.id === filterId);
         if (filter) filter.legalityType = e.target.value;
+        scheduleApplyFilters();
     });
 
     row.querySelector(".filter-format-select").addEventListener("change", e => {
         const filter = state.formatFilters.find(f => f.id === filterId);
         if (filter) filter.format = e.target.value;
+        scheduleApplyFilters();
     });
 
     row.querySelector(".remove-format-filter").addEventListener("click", () => removeFormatFilter(filterId));
@@ -901,6 +1238,7 @@ function removeFormatFilter(filterId) {
     state.formatFilters = state.formatFilters.filter(f => f.id !== filterId);
     const row = elements.formatFiltersContainer.querySelector(`[data-filter-id="${filterId}"]`);
     if (row) row.remove();
+    scheduleApplyFilters();
 }
 
 function evaluateFormatFilters(card) {
@@ -1017,11 +1355,13 @@ function addSortCriteria() {
     row.querySelector(".sort-field-select").addEventListener("change", e => {
         const sort = state.sortCriteria.find(s => s.id === sortId);
         if (sort) sort.field = e.target.value;
+        scheduleApplyFilters();
     });
 
     row.querySelector(".sort-direction-select").addEventListener("change", e => {
         const sort = state.sortCriteria.find(s => s.id === sortId);
         if (sort) sort.direction = e.target.value;
+        scheduleApplyFilters();
     });
 
     row.querySelector(".remove-sort-criteria").addEventListener("click", () => removeSortCriteria(sortId));
@@ -1031,6 +1371,7 @@ function removeSortCriteria(sortId) {
     state.sortCriteria = state.sortCriteria.filter(s => s.id !== sortId);
     const row = elements.sortCriteriaContainer.querySelector(`[data-sort-id="${sortId}"]`);
     if (row) row.remove();
+    scheduleApplyFilters();
 }
 
 function getCardColors(card) {
@@ -1040,23 +1381,31 @@ function getCardColors(card) {
     return sourceColors.map(color => String(color).toLowerCase());
 }
 
-function matchesColorFilter(card, colorFilter) {
-    if (!colorFilter) return true;
+function matchesColorFilter(card, colorFilters, colorMode) {
+    if (!colorFilters || colorFilters.length === 0) return true;
 
     const colors = getCardColors(card);
     if (colors === null) return false;
 
-    if (colorFilter === "multicolored") return colors.length > 1;
-    if (colorFilter === "monocolored") return colors.length === 1;
-    if (colorFilter === "colorless") return colors.length === 0;
+    const selectedSet = new Set(colorFilters);
+    const cardSet = new Set(colors);
 
-    return colors.includes(colorFilter);
+    if (colorMode === "exact") {
+        if (cardSet.size !== selectedSet.size) return false;
+        return colorFilters.every(color => cardSet.has(color));
+    }
+
+    if (colorMode === "at-most") {
+        return colors.every(color => selectedSet.has(color));
+    }
+
+    return colorFilters.every(color => colors.includes(color));
 }
 
 function hasScryfallDependentFilters(filters) {
     const hasCmcFilter = Boolean(filters.cmcOperator && filters.cmcValue);
     const hasCardTypeFilter = Boolean(filters.cardType);
-    const hasColorFilter = Boolean(filters.color);
+    const hasColorFilter = Array.isArray(filters.color) && filters.color.length > 0;
     const hasFormatFilter = state.formatFilters.some(filter => filter.format);
     return hasCmcFilter || hasCardTypeFilter || hasColorFilter || hasFormatFilter;
 }
@@ -1090,7 +1439,8 @@ async function applyFilters() {
         rarity: elements.filterRaritySelect.value.toLowerCase(),
         condition: elements.filterConditionSelect.value.toLowerCase(),
         language: elements.filterLanguageSelect.value.toLowerCase(),
-        color: elements.filterColorSelect.value.toLowerCase(),
+        color: getSelectedColorFilters(),
+        colorMode: getSelectedColorMode(),
         foil: elements.filterFoilSelect.value.toLowerCase(),
         cmcOperator: elements.filterCMCOperator.value,
         cmcValue: elements.filterCMCValue.value,
@@ -1102,14 +1452,14 @@ async function applyFilters() {
     }
 
     state.filteredCards = state.allCards.filter(card => {
-        if (filters.name && !(card["Name"] || "").toLowerCase().includes(filters.name)) return false;
-        if (filters.binderName && (card["Binder Name"] || "").toLowerCase() !== filters.binderName) return false;
-        if (filters.binderType && (card["Binder Type"] || "").toLowerCase() !== filters.binderType) return false;
-        if (filters.rarity && (card["Rarity"] || "").toLowerCase() !== filters.rarity) return false;
-        if (filters.condition && (card["Condition"] || "").toLowerCase() !== filters.condition) return false;
-        if (filters.language && (card["Language"] || "").toLowerCase() !== filters.language) return false;
-        if (!matchesColorFilter(card, filters.color)) return false;
-        if (filters.foil && (card["Foil"] || "").toLowerCase() !== filters.foil) return false;
+        if (filters.name && !card._filterName.includes(filters.name)) return false;
+        if (filters.binderName && card._filterBinderName !== filters.binderName) return false;
+        if (filters.binderType && card._filterBinderType !== filters.binderType) return false;
+        if (filters.rarity && card._filterRarity !== filters.rarity) return false;
+        if (filters.condition && card._filterCondition !== filters.condition) return false;
+        if (filters.language && card._filterLanguage !== filters.language) return false;
+        if (!matchesColorFilter(card, filters.color, filters.colorMode)) return false;
+        if (filters.foil && card._filterFoil !== filters.foil) return false;
 
         if (filters.cmcOperator && filters.cmcValue) {
             if (!card._scryfall || card._scryfall.cmc === undefined) return false;
@@ -1233,7 +1583,7 @@ function createCardElement(card) {
                     </div>
                     <div>
                         <div class="detail-label">Type</div>
-                        <div class="detail-value">${escapeHtml(card["Binder Type"] || "")}</div>
+                        <div class="detail-value">${escapeHtml(toDisplayLabel(card["Binder Type"] || ""))}</div>
                     </div>
                     <div>
                         <div class="detail-label">Purchase</div>
@@ -1262,31 +1612,33 @@ function createCardElement(card) {
 
 function buildLegalities(card) {
     if (!card._scryfall || !card._scryfall.legalities) return "";
+    const selectedDisplayFormats = new Set(getSelectedLegalityDisplayFormats());
+
     const entries = Object.entries(card._scryfall.legalities)
-        .filter(([, status]) => ["legal", "banned", "restricted"].includes(status));
+        .filter(([format, status]) => {
+            if (!["legal", "banned", "restricted"].includes(status)) return false;
+            if (selectedDisplayFormats.size === 0) return true;
+            return selectedDisplayFormats.has(format);
+        });
 
     if (entries.length === 0) return "";
 
     return entries.map(([format, status]) => {
         const statusClass = status === "legal" ? "legal" : status;
-        return `<span class="legality-item ${statusClass}">${format}: ${status}</span>`;
+        return `<span class="legality-item ${statusClass}">${escapeHtml(getFormatLabel(format))}</span>`;
     }).join("");
 }
 
-async function enrichCard(card, cardElement) {
+async function enrichCard(card, cardElement, options = {}) {
+    const { cacheOnly = false } = options;
+
     if (!card["Scryfall ID"]) return;
     if (card._scryfall) return;
 
-    const scryfallData = await fetchScryfallCard(card["Scryfall ID"]);
+    const scryfallData = await fetchScryfallCard(card["Scryfall ID"], { cacheOnly });
     if (!scryfallData) return;
 
-    card._scryfall = scryfallData;
-    card._cardTypes = extractCardTypes(scryfallData.type_line || "");
-
-    const printedName = scryfallData.printed_name;
-    card._displayName = printedName && printedName !== scryfallData.name
-        ? `${card["Name"]} (${printedName})`
-        : (card["Name"] || "");
+    applyScryfallDataToCard(card, scryfallData);
 
     if (cardElement) {
         const newHtml = createCardElement(card);
@@ -1363,7 +1715,7 @@ async function updateBulkDataForCurrentCards() {
         cmcOperator: elements.filterCMCOperator.value,
         cmcValue: elements.filterCMCValue.value,
         cardType: elements.filterCardTypeSelect.value,
-        color: elements.filterColorSelect.value
+        color: getSelectedColorFilters()
     })) {
         await applyFilters();
     }
@@ -1385,7 +1737,10 @@ function resetFilters() {
     elements.filterRaritySelect.value = "";
     elements.filterConditionSelect.value = "";
     elements.filterLanguageSelect.value = "";
-    elements.filterColorSelect.value = "";
+    setSelectedColorFilters([]);
+    if (elements.filterColorModeSelect) {
+        elements.filterColorModeSelect.value = "includes";
+    }
     elements.filterFoilSelect.value = "";
     elements.filterCMCOperator.value = "";
     elements.filterCMCValue.value = "";
@@ -1416,11 +1771,15 @@ function getCurrentFilterState() {
             rarity: elements.filterRaritySelect.value,
             condition: elements.filterConditionSelect.value,
             language: elements.filterLanguageSelect.value,
-            color: elements.filterColorSelect.value,
+            color: getSelectedColorFilters(),
+            colorMode: getSelectedColorMode(),
             foil: elements.filterFoilSelect.value,
             cmcOperator: elements.filterCMCOperator.value,
             cmcValue: elements.filterCMCValue.value,
             cardType: elements.filterCardTypeSelect.value
+        },
+        display: {
+            legalityFormats: getSelectedLegalityDisplayFormats()
         },
         formatFilters: state.formatFilters.map(f => ({
             connector: f.connector,
@@ -1445,8 +1804,16 @@ function loadSavedConfigs() {
     });
 }
 
-function saveCurrentConfig() {
-    const name = prompt("Enter a name for this configuration:");
+async function saveCurrentConfig() {
+    const prefilledName = elements.savedConfigsSelect.value || "";
+    const name = await showInputDialog({
+        title: "Save Configuration",
+        message: "Enter a name for this configuration:",
+        confirmLabel: "Save",
+        cancelLabel: "Cancel",
+        value: prefilledName,
+        placeholder: "Configuration name"
+    });
     if (!name || name.trim() === "") return;
 
     const configs = JSON.parse(localStorage.getItem("mtg_filter_configs") || "{}");
@@ -1474,11 +1841,27 @@ function loadSelectedConfig() {
     elements.filterRaritySelect.value = config.filters.rarity || "";
     elements.filterConditionSelect.value = config.filters.condition || "";
     elements.filterLanguageSelect.value = config.filters.language || "";
-    elements.filterColorSelect.value = config.filters.color || "";
+    if (Array.isArray(config.filters.color)) {
+        setSelectedColorFilters(config.filters.color);
+    } else if (config.filters.color) {
+        setSelectedColorFilters([config.filters.color]);
+    } else {
+        setSelectedColorFilters([]);
+    }
+    if (elements.filterColorModeSelect) {
+        elements.filterColorModeSelect.value = config.filters.colorMode || "includes";
+    }
     elements.filterFoilSelect.value = config.filters.foil || "";
     elements.filterCMCOperator.value = config.filters.cmcOperator || "";
     elements.filterCMCValue.value = config.filters.cmcValue || "";
     elements.filterCardTypeSelect.value = config.filters.cardType || "";
+
+    if (elements.legalityDisplayList) {
+        const selectedLegalityFormats = new Set((config.display && config.display.legalityFormats) || []);
+        Array.from(elements.legalityDisplayList.querySelectorAll('input[type="checkbox"]')).forEach(input => {
+            input.checked = selectedLegalityFormats.has(input.value);
+        });
+    }
 
     state.formatFilters = [];
     state.nextFormatId = 0;
@@ -1501,16 +1884,19 @@ function loadSelectedConfig() {
         connectorSelect.addEventListener("change", e => {
             const target = state.formatFilters.find(f => f.id === filterId);
             if (target) target.connector = e.target.value;
+            scheduleApplyFilters();
         });
 
         legalitySelect.addEventListener("change", e => {
             const target = state.formatFilters.find(f => f.id === filterId);
             if (target) target.legalityType = e.target.value;
+            scheduleApplyFilters();
         });
 
         formatSelect.addEventListener("change", e => {
             const target = state.formatFilters.find(f => f.id === filterId);
             if (target) target.format = e.target.value;
+            scheduleApplyFilters();
         });
 
         removeBtn.addEventListener("click", () => removeFormatFilter(filterId));
@@ -1535,15 +1921,21 @@ function loadSelectedConfig() {
         fieldSelect.addEventListener("change", e => {
             const target = state.sortCriteria.find(s => s.id === sortId);
             if (target) target.field = e.target.value;
+            scheduleApplyFilters();
         });
 
         directionSelect.addEventListener("change", e => {
             const target = state.sortCriteria.find(s => s.id === sortId);
             if (target) target.direction = e.target.value;
+            scheduleApplyFilters();
         });
 
         removeBtn.addEventListener("click", () => removeSortCriteria(sortId));
     });
+
+    if (state.displayedCards.length > 0) {
+        renderPage();
+    }
 
     applyFilters();
 }
@@ -1574,10 +1966,31 @@ function attachEventListeners() {
         handleFile(file);
     });
 
-    elements.applyFiltersBtn.addEventListener("click", applyFilters);
-    elements.searchNameInput.addEventListener("keypress", event => {
-        if (event.key === "Enter") applyFilters();
+    if (elements.applyFiltersBtn) {
+        elements.applyFiltersBtn.addEventListener("click", applyFilters);
+    }
+
+    elements.searchNameInput.addEventListener("input", () => scheduleApplyFilters());
+
+    [
+        elements.filterBinderNameSelect,
+        elements.filterBinderTypeSelect,
+        elements.filterRaritySelect,
+        elements.filterConditionSelect,
+        elements.filterLanguageSelect,
+        elements.filterColorModeSelect,
+        elements.filterFoilSelect,
+        elements.filterCMCOperator,
+        elements.filterCardTypeSelect,
+        elements.savedConfigsSelect
+    ].forEach(control => {
+        if (!control || control === elements.savedConfigsSelect) return;
+        control.addEventListener("change", () => scheduleApplyFilters());
     });
+
+    if (elements.filterCMCValue) {
+        elements.filterCMCValue.addEventListener("input", () => scheduleApplyFilters());
+    }
     elements.addFormatFilterBtn.addEventListener("click", addFormatFilter);
     elements.addSortCriteriaBtn.addEventListener("click", addSortCriteria);
     elements.saveConfigBtn.addEventListener("click", saveCurrentConfig);
@@ -1587,9 +2000,45 @@ function attachEventListeners() {
     elements.toggleDetailsBtn.addEventListener("click", toggleDetails);
     elements.enrichVisibleBtn.addEventListener("click", enrichVisibleCards);
     elements.updateBulkDataBtn.addEventListener("click", updateBulkDataForCurrentCards);
+    if (elements.filterColorButtons) {
+        elements.filterColorButtons.addEventListener("click", event => {
+            const button = event.target.closest(".color-filter-btn");
+            if (!button) return;
+            button.classList.toggle("active");
+            scheduleApplyFilters();
+        });
+    }
+    if (elements.legalityDisplayList) {
+        elements.legalityDisplayList.addEventListener("change", () => {
+            saveLegalityDisplaySettings();
+            if (state.displayedCards.length > 0) {
+                renderPage();
+            }
+        });
+    }
+
+    if (elements.legalityMenuToggle) {
+        elements.legalityMenuToggle.addEventListener("click", event => {
+            event.stopPropagation();
+            toggleLegalityMenu();
+        });
+    }
+
+    document.addEventListener("click", event => {
+        if (!elements.legalityMenu || !elements.legalityMenuToggle) return;
+        const clickedInsideMenu = elements.legalityMenu.contains(event.target);
+        const clickedToggle = elements.legalityMenuToggle.contains(event.target);
+        if (!clickedInsideMenu && !clickedToggle) {
+            toggleLegalityMenu(false);
+        }
+    });
 
     if (elements.infoDialogClose) {
-        elements.infoDialogClose.addEventListener("click", closeInfoDialog);
+        elements.infoDialogClose.addEventListener("click", handleInfoDialogPrimaryAction);
+    }
+
+    if (elements.infoDialogCancel) {
+        elements.infoDialogCancel.addEventListener("click", handleInfoDialogCancelAction);
     }
 
     if (elements.infoDialog) {
@@ -1605,6 +2054,7 @@ async function handleFile(file) {
     if (!file) return;
     const text = await file.text();
     state.allCards = parseCSV(text);
+    prepareCardsForFiltering(state.allCards);
     state.filteredCards = [...state.allCards];
     state.displayedCards = [...state.allCards];
     const totalQuantity = state.allCards.reduce((sum, card) => sum + (parseInt(card["Quantity"], 10) || 0), 0);
@@ -1618,12 +2068,15 @@ async function handleFile(file) {
     loadFilterOptions(state.allCards);
     renderCards(state.allCards);
     setStatus("Scryfall: idle");
+
+    scheduleBackgroundCardWarmup(state.allCards);
 }
 
 async function init() {
     elements.infoDialog = document.getElementById("info-dialog");
     elements.infoDialogTitle = document.getElementById("info-dialog-title");
     elements.infoDialogBody = document.getElementById("info-dialog-body");
+    elements.infoDialogCancel = document.getElementById("info-dialog-cancel");
     elements.infoDialogClose = document.getElementById("info-dialog-close");
     closeInfoDialog();
 
@@ -1631,6 +2084,9 @@ async function init() {
     await refreshBulkMetaStatus();
     loadSavedConfigs();
     loadCardTypesCatalog();
+    initializeColorFilterButtons();
+    loadLegalityDisplayFormatsOptions();
+    loadLegalityDisplaySettings();
     attachEventListeners();
 }
 

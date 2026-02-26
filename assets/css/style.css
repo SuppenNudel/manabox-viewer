@@ -51,7 +51,55 @@ body {
 
 .topbar-actions {
     display: flex;
+    align-items: center;
     gap: 0.6rem;
+}
+
+.legality-menu-wrap {
+    position: relative;
+}
+
+.legality-menu {
+    position: absolute;
+    top: calc(100% + 0.45rem);
+    right: 0;
+    width: 280px;
+    max-height: 360px;
+    overflow: auto;
+    padding: 0.65rem;
+    border-radius: 12px;
+    border: 1px solid #dbcfc3;
+    background: #ffffff;
+    box-shadow: 0 10px 24px rgba(15, 28, 36, 0.18);
+    z-index: 30;
+}
+
+.legality-menu-title {
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    margin-bottom: 0.5rem;
+}
+
+.legality-display-list {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.legality-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.88rem;
+    color: var(--ink);
+    cursor: pointer;
+    padding: 0.22rem 0.2rem;
+    border-radius: 8px;
+}
+
+.legality-checkbox:hover {
+    background: #fff8ef;
 }
 
 .topbar .toggle-btn,
@@ -202,6 +250,22 @@ body {
     margin-top: 0;
 }
 
+.dialog-actions .ghost-btn {
+    width: auto;
+    min-width: 90px;
+    margin-top: 0;
+}
+
+.dialog-input {
+    width: 100%;
+    margin-top: 0.6rem;
+    padding: 0.6rem 0.65rem;
+    border: 1px solid #dbcfc3;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    background: #ffffff;
+}
+
 .dialog-table {
     width: 100%;
     border-collapse: collapse;
@@ -238,7 +302,7 @@ body {
 .format-filter-row,
 .sort-criteria-row {
     display: grid;
-    grid-template-columns: 70px 1fr 1.3fr 34px;
+    grid-template-columns: 70px minmax(0, 1fr) minmax(0, 1.3fr) 34px;
     gap: 0.5rem;
     align-items: center;
     padding: 0.5rem;
@@ -253,7 +317,7 @@ body {
 }
 
 .sort-criteria-row {
-    grid-template-columns: 1fr 120px 34px;
+    grid-template-columns: minmax(0, 1fr) 120px 34px;
 }
 
 .filter-connector,
@@ -261,6 +325,8 @@ body {
 .filter-format-select,
 .sort-field-select,
 .sort-direction-select {
+    width: 100%;
+    min-width: 0;
     padding: 0.4rem;
     border-radius: 8px;
     border: 1px solid #dbcfc3;
@@ -270,6 +336,8 @@ body {
 
 .remove-format-filter,
 .remove-sort-criteria {
+    width: 34px;
+    min-width: 34px;
     height: 34px;
     border-radius: 8px;
     border: none;
@@ -296,6 +364,57 @@ body {
     border-radius: 10px;
     font-size: 0.9rem;
     background: #ffffff;
+}
+
+.color-filter-buttons {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.4rem;
+}
+
+.color-filter-btn {
+    border: 1px solid #d7c9bb;
+    border-radius: 999px;
+    height: 34px;
+    font-weight: 700;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    opacity: 0.55;
+}
+
+.color-filter-btn:hover {
+    transform: translateY(-1px);
+}
+
+.color-filter-btn.active {
+    opacity: 1;
+    box-shadow: 0 0 0 2px rgba(15, 139, 141, 0.35);
+}
+
+.color-filter-btn.color-w {
+    background: #f5efe7;
+    color: #2b2b2b;
+}
+
+.color-filter-btn.color-u {
+    background: #7fb3d5;
+    color: #102030;
+}
+
+.color-filter-btn.color-b {
+    background: #2f3a45;
+    color: #f2f2f2;
+}
+
+.color-filter-btn.color-r {
+    background: #d86f62;
+    color: #2b1a18;
+}
+
+.color-filter-btn.color-g {
+    background: #7daa67;
+    color: #173020;
 }
 
 .grid-2 {
@@ -491,17 +610,40 @@ body {
 }
 
 .legalities {
-    font-size: 0.8rem;
-    color: var(--ink-soft);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    font-size: 0.78rem;
 }
 
 .legality-item {
-    margin-right: 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+    border: 1px solid transparent;
 }
 
-.legality-item.legal { color: #1b7f5d; }
-.legality-item.banned,
-.legality-item.restricted { color: #bf3b3b; }
+.legality-item.legal {
+    background: #1b7f5d;
+    border-color: #176e50;
+    color: #ffffff;
+}
+
+.legality-item.banned {
+    background: #bf3b3b;
+    border-color: #a43232;
+    color: #ffffff;
+}
+
+.legality-item.restricted {
+    background: #f4b74a;
+    border-color: #dca33f;
+    color: #2b2b2b;
+}
 
 .card-actions {
     display: flex;
