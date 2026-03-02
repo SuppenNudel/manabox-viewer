@@ -124,6 +124,7 @@ const elements = {
     filterConditionSelect: document.getElementById("filter-condition"),
     filterLanguageSelect: document.getElementById("filter-language"),
     filterColorButtons: document.getElementById("filter-color-buttons"),
+    filterColorSourceSelect: document.getElementById("filter-color-source"),
     filterColorModeSelect: document.getElementById("filter-color-mode"),
     filterColorCountOperatorSelect: document.getElementById("filter-color-count-operator"),
     filterColorCountSelect: document.getElementById("filter-color-count"),
@@ -202,10 +203,11 @@ const COLOR_FILTER_OPTIONS = [
     { value: "u", label: "U", className: "color-u" },
     { value: "b", label: "B", className: "color-b" },
     { value: "r", label: "R", className: "color-r" },
-    { value: "g", label: "G", className: "color-g" }
+    { value: "g", label: "G", className: "color-g" },
+    { value: "c", label: "C", className: "color-c" }
 ];
 
-const COLOR_ORDER = ["w", "u", "b", "r", "g"];
+const COLOR_ORDER = ["w", "u", "b", "r", "g", "c"];
 
 function canonicalColorKey(code) {
     return String(code || "")
@@ -332,6 +334,10 @@ function getSelectedColorFilters() {
 
 function getSelectedColorMode() {
     return elements.filterColorModeSelect ? elements.filterColorModeSelect.value : "includes";
+}
+
+function getSelectedColorSource() {
+    return elements.filterColorSourceSelect ? elements.filterColorSourceSelect.value : "colors";
 }
 
 function getSelectedColorCount() {
@@ -1574,21 +1580,48 @@ function removeSortCriteria(sortId) {
     scheduleApplyFilters();
 }
 
-function getCardColors(card) {
+function getCardColors(card, source = "colors") {
     if (!card._scryfall) return null;
 
-    const sourceColors = Array.isArray(card._scryfall.colors) ? card._scryfall.colors : [];
-    return sourceColors.map(color => String(color).toLowerCase());
+    const allowedColors = new Set(["w", "u", "b", "r", "g", "c"]);
+    let sourceColors = [];
+    if (source === "identity") {
+        sourceColors = Array.isArray(card._scryfall.color_identity) ? card._scryfall.color_identity : [];
+    } else if (source === "produces") {
+        sourceColors = Array.isArray(card._scryfall.produced_mana) ? card._scryfall.produced_mana : [];
+    } else {
+        sourceColors = Array.isArray(card._scryfall.colors) ? card._scryfall.colors : [];
+    }
+    const producesMana = Array.isArray(card._scryfall.produced_mana) ? card._scryfall.produced_mana : [];
+    const colors = new Set();
+
+    sourceColors.forEach(color => {
+        const normalized = String(color).toLowerCase();
+        if (allowedColors.has(normalized)) colors.add(normalized);
+    });
+
+    if (source !== "produces") {
+        producesMana.forEach(color => {
+            const normalized = String(color).toLowerCase();
+            if (allowedColors.has(normalized)) colors.add(normalized);
+        });
+    }
+
+    if (colors.size === 0) {
+        colors.add("c");
+    }
+
+    return Array.from(colors);
 }
 
-function matchesColorCountFilter(card, colorCountOperator, colorCountFilter) {
+function matchesColorCountFilter(card, colorCountOperator, colorCountFilter, colorSource) {
     if (!colorCountOperator || colorCountFilter === "") return true;
-    const colors = getCardColors(card);
+    const colors = getCardColors(card, colorSource);
     if (colors === null) return false;
     const target = parseInt(colorCountFilter, 10);
     if (Number.isNaN(target)) return true;
 
-    const actual = colors.length;
+    const actual = colors.filter(color => color !== "c").length;
     switch (colorCountOperator) {
         case "=": return actual === target;
         case "!=": return actual !== target;
@@ -1600,25 +1633,35 @@ function matchesColorCountFilter(card, colorCountOperator, colorCountFilter) {
     }
 }
 
-function matchesColorFilter(card, colorFilters, colorMode) {
+function matchesColorFilter(card, colorFilters, colorMode, colorSource) {
     if (!colorFilters || colorFilters.length === 0) return true;
 
-    const colors = getCardColors(card);
+    const colors = getCardColors(card, colorSource);
     if (colors === null) return false;
 
-    const selectedSet = new Set(colorFilters);
-    const cardSet = new Set(colors);
+    const normalizedFilters = colorFilters.map(color => String(color).toLowerCase());
+    const wantsColorless = normalizedFilters.includes("c");
+    const selectedColors = normalizedFilters.filter(color => color !== "c");
+    const filteredColors = colors.filter(color => color !== "c");
+
+    if (wantsColorless) {
+        if (selectedColors.length > 0) return false;
+        return filteredColors.length === 0;
+    }
+
+    const selectedSet = new Set(selectedColors);
+    const cardSet = new Set(filteredColors);
 
     if (colorMode === "exact") {
         if (cardSet.size !== selectedSet.size) return false;
-        return colorFilters.every(color => cardSet.has(color));
+        return selectedColors.every(color => cardSet.has(color));
     }
 
     if (colorMode === "at-most") {
-        return colors.every(color => selectedSet.has(color));
+        return filteredColors.every(color => selectedSet.has(color));
     }
 
-    return colorFilters.every(color => colors.includes(color));
+    return selectedColors.every(color => filteredColors.includes(color));
 }
 
 function hasScryfallDependentFilters(filters) {
@@ -1660,6 +1703,7 @@ async function applyFilters() {
         condition: elements.filterConditionSelect.value.toLowerCase(),
         language: elements.filterLanguageSelect.value.toLowerCase(),
         color: getSelectedColorFilters(),
+        colorSource: getSelectedColorSource(),
         colorMode: getSelectedColorMode(),
         colorCountOperator: getSelectedColorCountOperator(),
         colorCount: getSelectedColorCount(),
@@ -1680,8 +1724,8 @@ async function applyFilters() {
         if (filters.rarity && card._filterRarity !== filters.rarity) return false;
         if (filters.condition && card._filterCondition !== filters.condition) return false;
         if (filters.language && card._filterLanguage !== filters.language) return false;
-        if (!matchesColorFilter(card, filters.color, filters.colorMode)) return false;
-        if (!matchesColorCountFilter(card, filters.colorCountOperator, filters.colorCount)) return false;
+        if (!matchesColorFilter(card, filters.color, filters.colorMode, filters.colorSource)) return false;
+        if (!matchesColorCountFilter(card, filters.colorCountOperator, filters.colorCount, filters.colorSource)) return false;
         if (filters.foil && card._filterFoil !== filters.foil) return false;
 
         if (filters.cmcOperator && filters.cmcValue) {
@@ -1973,6 +2017,9 @@ function resetFilters() {
     elements.filterConditionSelect.value = "";
     elements.filterLanguageSelect.value = "";
     setSelectedColorFilters([]);
+    if (elements.filterColorSourceSelect) {
+        elements.filterColorSourceSelect.value = "colors";
+    }
     if (elements.filterColorModeSelect) {
         elements.filterColorModeSelect.value = "includes";
     }
@@ -2013,6 +2060,7 @@ function getCurrentFilterState() {
             condition: elements.filterConditionSelect.value,
             language: elements.filterLanguageSelect.value,
             color: getSelectedColorFilters(),
+            colorSource: getSelectedColorSource(),
             colorMode: getSelectedColorMode(),
             colorCountOperator: getSelectedColorCountOperator(),
             colorCount: getSelectedColorCount(),
@@ -2093,6 +2141,9 @@ function loadSelectedConfig() {
     }
     if (elements.filterColorModeSelect) {
         elements.filterColorModeSelect.value = config.filters.colorMode || "includes";
+    }
+    if (elements.filterColorSourceSelect) {
+        elements.filterColorSourceSelect.value = config.filters.colorSource || "colors";
     }
     if (elements.filterColorCountOperatorSelect) {
         elements.filterColorCountOperatorSelect.value = config.filters.colorCountOperator || (config.filters.colorCount ? "=" : "");
@@ -2227,6 +2278,7 @@ function attachEventListeners() {
         elements.filterRaritySelect,
         elements.filterConditionSelect,
         elements.filterLanguageSelect,
+        elements.filterColorSourceSelect,
         elements.filterColorModeSelect,
         elements.filterColorCountOperatorSelect,
         elements.filterColorCountSelect,
