@@ -11,6 +11,7 @@ const state = {
     scryfallObserver: null,
     scryfallCache: null,
     scryfallInFlight: new Map(),
+    scryfallQueryCache: new Map(),
     bulkRemoteMeta: null,
     bulkLocalUpdatedAt: null,
     bulkLoadingPromise: null,
@@ -118,6 +119,7 @@ const elements = {
     infoDialogCancel: document.getElementById("info-dialog-cancel"),
     infoDialogClose: document.getElementById("info-dialog-close"),
     searchNameInput: document.getElementById("search-name"),
+    scryfallQueryInput: document.getElementById("scryfall-query"),
     filterBinderNameSelect: document.getElementById("filter-binder-name"),
     filterBinderTypeSelect: document.getElementById("filter-binder-type"),
     filterRaritySelect: document.getElementById("filter-rarity"),
@@ -148,7 +150,8 @@ const elements = {
     downloadListBtn: document.getElementById("download-list"),
     toggleDetailsBtn: document.getElementById("toggle-details"),
     enrichVisibleBtn: document.getElementById("enrich-visible"),
-    enrichStatus: document.getElementById("enrich-status")
+    enrichStatus: document.getElementById("enrich-status"),
+    applyScryfallQueryBtn: document.getElementById("apply-scryfall-query")
 };
 
 const SCRYFALL_DEFAULT_CARDS_META_URL = "https://api.scryfall.com/bulk-data/default_cards";
@@ -1176,6 +1179,52 @@ async function fetchScryfallCard(id, options = {}) {
     return request;
 }
 
+async function searchScryfallByQuery(query) {
+    if (!query || !query.trim()) return new Set();
+
+    const trimmedQuery = query.trim();
+    if (state.scryfallQueryCache.has(trimmedQuery)) {
+        return state.scryfallQueryCache.get(trimmedQuery);
+    }
+
+    const matchingIds = new Set();
+    let hasMore = true;
+    let cursor = null;
+
+    try {
+        while (hasMore) {
+            let url = `https://api.scryfall.com/cards/search?${new URLSearchParams({ q: trimmedQuery })}`;
+            if (cursor) {
+                url += `&page=${cursor}`;
+            }
+
+            const response = await fetch(url);
+            if (!response.ok) {
+                console.error(`Scryfall search failed: ${response.status}`);
+                state.scryfallQueryCache.set(trimmedQuery, new Set());
+                return new Set();
+            }
+
+            const data = await response.json();
+            if (data.data) {
+                data.data.forEach(card => {
+                    matchingIds.add(card.id);
+                });
+            }
+
+            hasMore = data.has_more ?? false;
+            cursor = (cursor || 0) + 1;
+        }
+    } catch (error) {
+        console.error("Scryfall search error:", error);
+        state.scryfallQueryCache.set(trimmedQuery, new Set());
+        return new Set();
+    }
+
+    state.scryfallQueryCache.set(trimmedQuery, matchingIds);
+    return matchingIds;
+}
+
 async function refreshBulkMetaStatus() {
     state.bulkLocalUpdatedAt = await getMetaValue(META_BULK_DEFAULT_CARDS_UPDATED_AT_KEY);
     try {
@@ -1669,8 +1718,9 @@ function hasScryfallDependentFilters(filters) {
     const hasCardTypeFilter = Boolean(filters.cardType);
     const hasColorFilter = Array.isArray(filters.color) && filters.color.length > 0;
     const hasColorCountFilter = Boolean(filters.colorCountOperator && filters.colorCount !== "");
+    const hasScryfallQueryFilter = Boolean(filters.scryfallQuery && filters.scryfallQuery.trim());
     const hasFormatFilter = state.formatFilters.some(filter => filter.format);
-    return hasCmcFilter || hasCardTypeFilter || hasColorFilter || hasColorCountFilter || hasFormatFilter;
+    return hasCmcFilter || hasCardTypeFilter || hasColorFilter || hasColorCountFilter || hasScryfallQueryFilter || hasFormatFilter;
 }
 
 async function enrichCardsForScryfallFilters(cards) {
@@ -1710,8 +1760,16 @@ async function applyFilters() {
         foil: elements.filterFoilSelect.value.toLowerCase(),
         cmcOperator: elements.filterCMCOperator.value,
         cmcValue: elements.filterCMCValue.value,
-        cardType: elements.filterCardTypeSelect.value.toLowerCase()
+        cardType: elements.filterCardTypeSelect.value.toLowerCase(),
+        scryfallQuery: elements.scryfallQueryInput.value
     };
+
+    let scryfallMatchingIds = new Set();
+    if (filters.scryfallQuery && filters.scryfallQuery.trim()) {
+        setStatus("Scryfall: searching...");
+        scryfallMatchingIds = await searchScryfallByQuery(filters.scryfallQuery);
+        setStatus("Scryfall: idle");
+    }
 
     if (hasScryfallDependentFilters(filters)) {
         await enrichCardsForScryfallFilters(state.allCards);
@@ -1746,6 +1804,11 @@ async function applyFilters() {
         if (filters.cardType) {
             const types = card._cardTypes || [];
             if (!types.includes(filters.cardType)) return false;
+        }
+
+        if (scryfallMatchingIds.size > 0) {
+            const cardScryfallId = card["Scryfall ID"];
+            if (!cardScryfallId || !scryfallMatchingIds.has(cardScryfallId)) return false;
         }
 
         if (!evaluateFormatFilters(card)) return false;
@@ -2011,6 +2074,7 @@ async function updateBulkDataForCurrentCards() {
 
 function resetFilters() {
     elements.searchNameInput.value = "";
+    elements.scryfallQueryInput.value = "";
     elements.filterBinderNameSelect.value = "";
     elements.filterBinderTypeSelect.value = "";
     elements.filterRaritySelect.value = "";
@@ -2054,6 +2118,7 @@ function getCurrentFilterState() {
     return {
         filters: {
             name: elements.searchNameInput.value,
+            scryfallQuery: elements.scryfallQueryInput.value,
             binderName: elements.filterBinderNameSelect.value,
             binderType: elements.filterBinderTypeSelect.value,
             rarity: elements.filterRaritySelect.value,
@@ -2127,6 +2192,7 @@ function loadSelectedConfig() {
     if (!config) return;
 
     elements.searchNameInput.value = config.filters.name || "";
+    elements.scryfallQueryInput.value = config.filters.scryfallQuery || "";
     elements.filterBinderNameSelect.value = config.filters.binderName || "";
     elements.filterBinderTypeSelect.value = config.filters.binderType || "";
     elements.filterRaritySelect.value = config.filters.rarity || "";
@@ -2271,6 +2337,13 @@ function attachEventListeners() {
     }
 
     elements.searchNameInput.addEventListener("input", () => scheduleApplyFilters());
+    elements.applyScryfallQueryBtn.addEventListener("click", () => applyFilters());
+    elements.scryfallQueryInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            applyFilters();
+        }
+    });
 
     [
         elements.filterBinderNameSelect,
