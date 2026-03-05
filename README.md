@@ -33,6 +33,14 @@ Then open `http://localhost:8000`.
 4. Save reusable filter/sort combinations as named configurations.
 5. Update bulk data when a newer Scryfall `default_cards` version is available.
 
+## Preload from Cardmarket Helper
+
+The viewer can be opened and preloaded directly from the Cardmarket Helper add-on.
+
+- On Cardmarket Orders pages, use the **Open in ManaBox Viewer** button.
+- The add-on sends the same adjusted shipment export CSV that is used by **Export Adjusted**.
+- Cardmarket shipment export columns (`idProduct`, `groupCount`, `price`, etc.) are converted on load to viewer-compatible fields.
+
 ## Filters and sorting
 
 ### Supported filters

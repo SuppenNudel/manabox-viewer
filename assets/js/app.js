@@ -1,4 +1,8 @@
 let applyFiltersDebounceTimer = null;
+const PRELOAD_MESSAGE_TYPE = "cardmarket-helper:preload-csv";
+let appInitialized = false;
+let pendingPreloadPayload = null;
+let lastPreloadSignature = "";
 
 function scheduleApplyFilters(delay = 120) {
     if (applyFiltersDebounceTimer) {
@@ -243,7 +247,7 @@ async function downloadJsonWithProgress(url, progressLabel, expectedTotalBytes =
     return jsonData;
 }
 
-function parseCSV(text) {
+function parseDelimitedCSV(text, delimiter = ",") {
     const rows = [];
     let row = [];
     let current = "";
@@ -263,7 +267,7 @@ function parseCSV(text) {
             continue;
         }
 
-        if (char === "," && !inQuotes) {
+        if (char === delimiter && !inQuotes) {
             row.push(current);
             current = "";
             continue;
@@ -306,6 +310,177 @@ function parseCSV(text) {
             return record;
         });
 }
+
+function detectCsvDelimiter(text) {
+    const firstLine = String(text || "").split(/\r?\n/)[0] || "";
+    const semicolons = (firstLine.match(/;/g) || []).length;
+    const commas = (firstLine.match(/,/g) || []).length;
+    return semicolons > commas ? ";" : ",";
+}
+
+function parseCSV(text) {
+    return parseDelimitedCSV(text, detectCsvDelimiter(text));
+}
+
+function getFirstNonEmptyValue(record, candidates) {
+    for (const candidate of candidates) {
+        const value = record[candidate];
+        if (value !== undefined && value !== null && String(value).trim() !== "") {
+            return String(value).trim();
+        }
+    }
+    return "";
+}
+
+function getLanguageFromCardmarketId(idValue) {
+    const id = String(idValue || "").trim();
+    if (!id) return "";
+    const languageKey = Object.keys(CARDMARKET_LANGUAGE_MAP).find(key => String(CARDMARKET_LANGUAGE_MAP[key]) === id);
+    if (!languageKey) return "";
+    return languageKey;
+}
+
+function getConditionFromCardmarketValue(conditionValue) {
+    const normalized = String(conditionValue || "").trim().toLowerCase().replace(/\s+/g, "_");
+    const conditionById = {
+        "1": "Mint",
+        "2": "Near Mint",
+        "3": "Excellent",
+        "4": "Good",
+        "5": "Light Played",
+        "6": "Played",
+        "7": "Poor"
+    };
+
+    if (conditionById[normalized]) {
+        return conditionById[normalized];
+    }
+
+    if (CONDITION_CODE_MAP[normalized]) {
+        return CONDITION_CODE_MAP[normalized].label;
+    }
+
+    return normalized ? toDisplayLabel(normalized) : "";
+}
+
+function toFoilLabel(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (["1", "true", "yes", "y"].includes(normalized)) return "Foil";
+    return "Normal";
+}
+
+function isCardmarketShipmentExport(cards) {
+    if (!Array.isArray(cards) || cards.length === 0) return false;
+    const first = cards[0];
+    return first.idProduct !== undefined && first.groupCount !== undefined;
+}
+
+function mapCardmarketShipmentToViewerCards(cards) {
+    return cards.map((card, index) => {
+        const quantityRaw = getFirstNonEmptyValue(card, ["groupCount", "amount", "Quantity", "quantity"]);
+        const quantity = parseInt(quantityRaw, 10);
+        const idProduct = getFirstNonEmptyValue(card, ["idProduct", "mkmid"]);
+        const name = getFirstNonEmptyValue(card, ["name", "Name", "productName", "articleName"]) || (idProduct ? `Cardmarket #${idProduct}` : `Card ${index + 1}`);
+
+        return {
+            "Name": name,
+            "Set code": getFirstNonEmptyValue(card, ["setCode", "set", "expansionCode"]),
+            "Set name": getFirstNonEmptyValue(card, ["setName", "expansion", "edition"]),
+            "Collector number": getFirstNonEmptyValue(card, ["collectorNumber", "collector", "number"]),
+            "Foil": toFoilLabel(getFirstNonEmptyValue(card, ["isFoil", "foil"])),
+            "Rarity": getFirstNonEmptyValue(card, ["rarity", "Rarity"]),
+            "Language": getFirstNonEmptyValue(card, ["language", "Language"]) || getLanguageFromCardmarketId(getFirstNonEmptyValue(card, ["idLanguage", "languageId"])),
+            "Condition": getConditionFromCardmarketValue(getFirstNonEmptyValue(card, ["condition", "Condition"])),
+            "Quantity": Number.isNaN(quantity) ? "1" : String(quantity),
+            "Scryfall ID": getFirstNonEmptyValue(card, ["scryfallId", "scryfall_id", "Scryfall ID"]),
+            "Purchase price": getFirstNonEmptyValue(card, ["price", "Purchase price"]),
+            "Purchase price currency": getFirstNonEmptyValue(card, ["currency", "Purchase price currency"]) || "EUR",
+            "Misprint": "false",
+            "Altered": "false",
+            "Binder Name": getFirstNonEmptyValue(card, ["binderName", "Binder Name"]),
+            "Binder Type": getFirstNonEmptyValue(card, ["binderType", "Binder Type"])
+        };
+    });
+}
+
+function normalizeImportedCards(cards) {
+    if (isCardmarketShipmentExport(cards)) {
+        return mapCardmarketShipmentToViewerCards(cards);
+    }
+    return cards;
+}
+
+function normalizeIncomingPreloadedCards(cards) {
+    return cards.map(card => {
+        const normalizedCard = { ...card };
+
+        const explicitScryfallId = getFirstNonEmptyValue(normalizedCard, ["Scryfall ID", "scryfallId", "scryfall_id"]);
+        if (explicitScryfallId) {
+            normalizedCard["Scryfall ID"] = String(explicitScryfallId).trim();
+        }
+
+        if (normalizedCard._scryfall && normalizedCard._scryfall.id) {
+            if (!normalizedCard["Scryfall ID"]) {
+                normalizedCard["Scryfall ID"] = String(normalizedCard._scryfall.id).trim();
+            }
+            applyScryfallDataToCard(normalizedCard, normalizedCard._scryfall);
+        }
+
+        return normalizedCard;
+    });
+}
+
+function getPreloadPayloadSignature(payload) {
+    const shipmentId = payload && payload.shipmentId ? String(payload.shipmentId) : "";
+    const csvLength = payload && payload.csvContent ? String(payload.csvContent.length) : "0";
+    const cardCount = payload && Array.isArray(payload.cards) ? String(payload.cards.length) : "0";
+    return `${shipmentId}:${csvLength}:${cardCount}`;
+}
+
+async function applyPreloadPayload(payload) {
+    if (!payload) {
+        return;
+    }
+
+    const sellerName = payload.sellerName ? String(payload.sellerName) : "unknown";
+    const shipmentId = payload.shipmentId ? String(payload.shipmentId) : "unknown";
+    const sourceLabel = `Cardmarket shipment ${shipmentId} (${sellerName})`;
+
+    if (Array.isArray(payload.cards) && payload.cards.length > 0) {
+        await handleCardsData(payload.cards, sourceLabel);
+        return;
+    }
+
+    if (!payload.csvContent) {
+        return;
+    }
+
+    await handleCsvText(payload.csvContent, sourceLabel);
+}
+
+function handlePreloadMessage(event) {
+    const data = event.data;
+    const hasCardsPayload = Array.isArray(data && data.cards) && data.cards.length > 0;
+    const hasCsvPayload = Boolean(data && data.csvContent);
+
+    if (!data || data.type !== PRELOAD_MESSAGE_TYPE || (!hasCardsPayload && !hasCsvPayload)) {
+        return;
+    }
+
+    const signature = getPreloadPayloadSignature(data);
+    if (signature === lastPreloadSignature) {
+        return;
+    }
+    lastPreloadSignature = signature;
+
+    pendingPreloadPayload = data;
+    if (appInitialized) {
+        applyPreloadPayload(pendingPreloadPayload);
+        pendingPreloadPayload = null;
+    }
+}
+
+window.addEventListener("message", handlePreloadMessage);
 
 function getExportCards() {
     if (Array.isArray(state.displayedCards) && state.displayedCards.length > 0) {
@@ -403,7 +578,26 @@ function downloadCurrentList() {
 }
 
 function normalizeLanguage(value) {
-    return value.toLowerCase().replace("-", "_");
+    const normalized = String(value || "").toLowerCase().trim().replace("-", "_");
+    if (LANGUAGE_LABELS[normalized]) {
+        return normalized;
+    }
+
+    const labelToCode = {
+        "english": "en",
+        "french": "fr",
+        "german": "de",
+        "spanish": "es",
+        "italian": "it",
+        "chinese (simplified)": "zh_cn",
+        "japanese": "ja",
+        "portuguese": "pt",
+        "russian": "ru",
+        "korean": "ko",
+        "chinese (traditional)": "zh_tw"
+    };
+
+    return labelToCode[normalized] || normalized;
 }
 
 function prepareCardsForFiltering(cards) {
@@ -1581,12 +1775,22 @@ function attachEventListeners() {
 async function handleFile(file) {
     if (!file) return;
     const text = await file.text();
-    state.allCards = parseCSV(text);
+    await handleCsvText(text, file.name);
+}
+
+async function handleCsvText(text, sourceName = "CSV") {
+    const parsedCards = parseCSV(text);
+    await handleCardsData(parsedCards, sourceName);
+}
+
+async function handleCardsData(cards, sourceName = "CSV") {
+    const importedCards = normalizeImportedCards(cards);
+    state.allCards = normalizeIncomingPreloadedCards(importedCards);
     prepareCardsForFiltering(state.allCards);
     state.filteredCards = [...state.allCards];
     state.displayedCards = [...state.allCards];
     const totalQuantity = state.allCards.reduce((sum, card) => sum + (parseInt(card["Quantity"], 10) || 0), 0);
-    elements.fileStatus.textContent = `Loaded: ${file.name} (${state.allCards.length} entries, ${totalQuantity} cards)`;
+    elements.fileStatus.textContent = `Loaded: ${sourceName} (${state.allCards.length} entries, ${totalQuantity} cards)`;
 
     const csvScryfallIds = state.allCards.map(card => card["Scryfall ID"]).filter(Boolean);
     if (state.bulkLocalUpdatedAt && csvScryfallIds.length > 0) {
@@ -1616,6 +1820,12 @@ async function init() {
     loadLegalityDisplayFormatsOptions();
     loadLegalityDisplaySettings();
     attachEventListeners();
+
+    appInitialized = true;
+    if (pendingPreloadPayload) {
+        await applyPreloadPayload(pendingPreloadPayload);
+        pendingPreloadPayload = null;
+    }
 }
 
 document.addEventListener("DOMContentLoaded", init);
