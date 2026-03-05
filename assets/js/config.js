@@ -1,3 +1,5 @@
+const APP_VERSION = "2026.3.5";
+
 const CONDITION_CODE_MAP = {
     "mint": { code: "mt", label: "Mint" },
     "near_mint": { code: "nm", label: "Near Mint" },

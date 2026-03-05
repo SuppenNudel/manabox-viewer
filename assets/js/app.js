@@ -1805,6 +1805,11 @@ async function handleCardsData(cards, sourceName = "CSV") {
 }
 
 async function init() {
+    const appVersionElement = document.getElementById("app-version");
+    if (appVersionElement) {
+        appVersionElement.textContent = APP_VERSION || "-";
+    }
+
     elements.infoDialog = document.getElementById("info-dialog");
     elements.infoDialogTitle = document.getElementById("info-dialog-title");
     elements.infoDialogBody = document.getElementById("info-dialog-body");
