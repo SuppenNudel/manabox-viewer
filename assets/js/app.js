@@ -1678,6 +1678,24 @@ function toggleDetails() {
     elements.toggleDetailsBtn.textContent = elements.toggleDetailsBtn.classList.contains("active") ? "Details" : "Compact";
 }
 
+function toggleDarkMode() {
+    const currentTheme = document.body.getAttribute("data-theme");
+    const newTheme = currentTheme === "dark" ? "light" : "dark";
+    
+    document.body.setAttribute("data-theme", newTheme);
+    elements.darkModeToggleBtn.textContent = newTheme === "dark" ? "☀️" : "🌙";
+    
+    localStorage.setItem("theme", newTheme);
+}
+
+function initializeDarkMode() {
+    const savedTheme = localStorage.getItem("theme") || "light";
+    document.body.setAttribute("data-theme", savedTheme);
+    if (elements.darkModeToggleBtn) {
+        elements.darkModeToggleBtn.textContent = savedTheme === "dark" ? "☀️" : "🌙";
+    }
+}
+
 function getCurrentFilterState() {
     return {
         filters: {
@@ -1951,6 +1969,7 @@ function attachEventListeners() {
     elements.savedConfigsSelect.addEventListener("change", loadSelectedConfig);
     elements.deleteConfigBtn.addEventListener("click", deleteSelectedConfig);
     elements.resetFiltersBtn.addEventListener("click", resetFilters);
+    elements.darkModeToggleBtn.addEventListener("click", toggleDarkMode);
     elements.toggleDetailsBtn.addEventListener("click", toggleDetails);
     elements.enrichVisibleBtn.addEventListener("click", enrichVisibleCards);
     elements.updateBulkDataBtn.addEventListener("click", updateBulkDataForCurrentCards);
@@ -2052,6 +2071,7 @@ async function init() {
     elements.infoDialogClose = document.getElementById("info-dialog-close");
     closeInfoDialog();
 
+    initializeDarkMode();
     state.scryfallCache = await openScryfallCache();
     await refreshBulkMetaStatus();
     loadSavedConfigs();

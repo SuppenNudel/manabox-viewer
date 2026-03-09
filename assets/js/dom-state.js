@@ -75,6 +75,7 @@ const elements = {
     cardCountSpan: document.getElementById("card-count"),
     downloadFormatSelect: document.getElementById("download-format"),
     downloadListBtn: document.getElementById("download-list"),
+    darkModeToggleBtn: document.getElementById("dark-mode-toggle"),
     toggleDetailsBtn: document.getElementById("toggle-details"),
     enrichVisibleBtn: document.getElementById("enrich-visible"),
     enrichStatus: document.getElementById("enrich-status")

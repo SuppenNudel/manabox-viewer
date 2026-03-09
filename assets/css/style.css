@@ -14,13 +14,40 @@
     --danger: #bf3b3b;
     --card: #ffffff;
     --shadow: 0 12px 28px rgba(15, 28, 36, 0.16);
+    --topbar-bg: linear-gradient(120deg, #ffffff 0%, #f2e7d8 100%);
+    --body-bg: radial-gradient(circle at 10% 10%, #ffffff 0%, #f6f1ea 45%, #efe6da 100%);
+    --border-color: #dbcfc3;
+    --input-bg: #ffffff;
+    --filter-row-bg: #fff8ef;
+    --filter-row-border: #e3d7c9;
+    --backdrop-bg: rgba(15, 28, 36, 0.45);
+}
+
+body[data-theme="dark"] {
+    --ink: #e8eaed;
+    --ink-soft: #9aa0a6;
+    --paper: #1f2429;
+    --mist: #2d3338;
+    --accent: #4dd4d7;
+    --accent-2: #f4b74a;
+    --danger: #f28b82;
+    --card: #292d32;
+    --shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+    --topbar-bg: linear-gradient(120deg, #1f2429 0%, #252a2f 100%);
+    --body-bg: radial-gradient(circle at 10% 10%, #1a1d21 0%, #1f2429 45%, #252a2f 100%);
+    --border-color: #3c4146;
+    --input-bg: #292d32;
+    --filter-row-bg: #252a2f;
+    --filter-row-border: #3c4146;
+    --backdrop-bg: rgba(0, 0, 0, 0.65);
 }
 
 body {
     font-family: "Space Grotesk", "Segoe UI", sans-serif;
     color: var(--ink);
-    background: radial-gradient(circle at 10% 10%, #ffffff 0%, #f6f1ea 45%, #efe6da 100%);
+    background: var(--body-bg);
     min-height: 100vh;
+    transition: background 0.3s ease, color 0.3s ease;
 }
 
 .page {
@@ -35,7 +62,7 @@ body {
     align-items: center;
     padding: 1rem 1.5rem;
     border-bottom: 1px solid var(--mist);
-    background: linear-gradient(120deg, #ffffff 0%, #f2e7d8 100%);
+    background: var(--topbar-bg);
 }
 
 .topbar h1 {
@@ -68,9 +95,9 @@ body {
     overflow: auto;
     padding: 0.65rem;
     border-radius: 12px;
-    border: 1px solid #dbcfc3;
-    background: #ffffff;
-    box-shadow: 0 10px 24px rgba(15, 28, 36, 0.18);
+    border: 1px solid var(--border-color);
+    background: var(--card);
+    box-shadow: var(--shadow);
     z-index: 30;
 }
 
@@ -99,7 +126,7 @@ body {
 }
 
 .legality-checkbox:hover {
-    background: #fff8ef;
+    background: var(--filter-row-bg);
 }
 
 .topbar .toggle-btn,
@@ -126,7 +153,7 @@ body {
     border-radius: 16px;
     padding: 1.1rem;
     box-shadow: var(--shadow);
-    border: 1px solid #efe4d6;
+    border: 1px solid var(--border-color);
 }
 
 .panel h2 {
@@ -135,11 +162,11 @@ body {
 }
 
 .dropzone {
-    border: 2px dashed #d6c7b7;
+    border: 2px dashed var(--border-color);
     border-radius: 16px;
     padding: 1rem;
     text-align: center;
-    background: #fff9f1;
+    background: var(--filter-row-bg);
     display: grid;
     gap: 0.5rem;
     justify-items: center;
@@ -147,7 +174,7 @@ body {
 
 .dropzone.dragover {
     border-color: var(--accent);
-    background: #f0fbfb;
+    background: var(--paper);
 }
 
 .file-btn {
@@ -182,9 +209,9 @@ body {
     width: 100%;
     height: 10px;
     border-radius: 999px;
-    background: #ece2d6;
+    background: var(--mist);
     overflow: hidden;
-    border: 1px solid #dbcfc3;
+    border: 1px solid var(--border-color);
 }
 
 .bulk-progress-bar {
@@ -201,7 +228,7 @@ body {
 .dialog-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(15, 28, 36, 0.45);
+    background: var(--backdrop-bg);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -213,7 +240,7 @@ body {
     width: min(900px, 96vw);
     max-height: 85vh;
     background: var(--card);
-    border: 1px solid #e3d7c9;
+    border: 1px solid var(--border-color);
     border-radius: 16px;
     box-shadow: var(--shadow);
     display: flex;
@@ -222,7 +249,7 @@ body {
 
 .dialog-header {
     padding: 0.9rem 1rem;
-    border-bottom: 1px solid #e9ded2;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .dialog-header h3 {
@@ -238,7 +265,7 @@ body {
 
 .dialog-actions {
     padding: 0.8rem 1rem;
-    border-top: 1px solid #e9ded2;
+    border-top: 1px solid var(--border-color);
     display: flex;
     justify-content: flex-end;
     gap: 0.6rem;
@@ -260,10 +287,11 @@ body {
     width: 100%;
     margin-top: 0.6rem;
     padding: 0.6rem 0.65rem;
-    border: 1px solid #dbcfc3;
+    border: 1px solid var(--border-color);
     border-radius: 10px;
     font-size: 0.9rem;
-    background: #ffffff;
+    background: var(--input-bg);
+    color: var(--ink);
 }
 
 .dialog-table {
@@ -274,7 +302,7 @@ body {
 
 .dialog-table th,
 .dialog-table td {
-    border-bottom: 1px solid #ece2d6;
+    border-bottom: 1px solid var(--mist);
     padding: 0.45rem 0.4rem;
     text-align: left;
     vertical-align: top;
@@ -283,7 +311,7 @@ body {
 .dialog-table th {
     position: sticky;
     top: 0;
-    background: #fff9f1;
+    background: var(--filter-row-bg);
     color: var(--ink);
 }
 
@@ -306,8 +334,8 @@ body {
     gap: 0.5rem;
     align-items: center;
     padding: 0.5rem;
-    background: #fff8ef;
-    border: 1px solid #e3d7c9;
+    background: var(--filter-row-bg);
+    border: 1px solid var(--filter-row-border);
     border-radius: 10px;
     margin-bottom: 0.5rem;
 }
@@ -332,8 +360,9 @@ body {
     min-width: 0;
     padding: 0.4rem;
     border-radius: 8px;
-    border: 1px solid #dbcfc3;
-    background: #ffffff;
+    border: 1px solid var(--border-color);
+    background: var(--input-bg);
+    color: var(--ink);
     font-size: 0.82rem;
 }
 
@@ -364,10 +393,11 @@ body {
 .filter-select {
     width: 100%;
     padding: 0.6rem 0.65rem;
-    border: 1px solid #dbcfc3;
+    border: 1px solid var(--border-color);
     border-radius: 10px;
     font-size: 0.9rem;
-    background: #ffffff;
+    background: var(--input-bg);
+    color: var(--ink);
 }
 
 .color-filter-buttons {
@@ -399,7 +429,7 @@ body {
 }
 
 .color-filter-btn {
-    border: 1px solid #d7c9bb;
+    border: 1px solid var(--border-color);
     border-radius: 999px;
     height: 34px;
     font-weight: 700;
@@ -480,15 +510,15 @@ body {
 }
 
 .ghost-btn {
-    background: #ffffff;
-    border: 1px solid #d7c9bb;
+    background: var(--card);
+    border: 1px solid var(--border-color);
     color: var(--ink-soft);
     margin-top: 0.4rem;
 }
 
 .toggle-btn {
-    background: #ffffff;
-    border: 1px solid #d7c9bb;
+    background: var(--card);
+    border: 1px solid var(--border-color);
     color: var(--ink-soft);
 }
 
@@ -560,7 +590,7 @@ body {
     border-radius: 16px;
     padding: 0.9rem;
     box-shadow: var(--shadow);
-    border: 1px solid #efe4d6;
+    border: 1px solid var(--border-color);
 }
 
 .card-image {
@@ -568,7 +598,7 @@ body {
     height: 196px;
     border-radius: 10px;
     overflow: hidden;
-    background: #f1ece4;
+    background: var(--mist);
     display: flex;
     align-items: center;
     justify-content: center;
