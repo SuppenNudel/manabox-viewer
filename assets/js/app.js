@@ -614,7 +614,17 @@ function prepareCardsForFiltering(cards) {
 
 function applyScryfallDataToCard(card, scryfallData) {
     card._scryfall = scryfallData;
-    card._cardTypes = extractCardTypes(scryfallData.type_line || "");
+    
+    // For multi-face cards, use front face or all faces based on setting
+    let typeLineSrc;
+    if (state.multiFaceMode === "all" && scryfallData.type_line) {
+        typeLineSrc = scryfallData.type_line;
+    } else if (Array.isArray(scryfallData.card_faces) && scryfallData.card_faces[0]) {
+        typeLineSrc = scryfallData.card_faces[0].type_line;
+    } else {
+        typeLineSrc = scryfallData.type_line;
+    }
+    card._cardTypes = extractCardTypes(typeLineSrc || "");
 
     const printedName = scryfallData.printed_name;
     card._displayName = printedName && printedName !== scryfallData.name
@@ -1001,6 +1011,14 @@ function getCardColors(card, source = "colors") {
     if (!card._scryfall) return null;
 
     const getColorField = field => {
+        // Respect multi-face mode setting
+        if (state.multiFaceMode === "front" && Array.isArray(card._scryfall.card_faces) && card._scryfall.card_faces[0]) {
+            const faceValue = card._scryfall.card_faces[0][field];
+            if (Array.isArray(faceValue) && faceValue.length > 0) {
+                return faceValue;
+            }
+        }
+        
         const topLevel = card._scryfall[field];
         if (Array.isArray(topLevel) && topLevel.length > 0) {
             return topLevel;
@@ -1019,8 +1037,15 @@ function getCardColors(card, source = "colors") {
         sourceColors = getColorField("produced_mana");
     } else if (source === "mana_cost") {
         // Parse mana cost string like "{2}{W}{U}" to extract color symbols
-        const manaCost = card._scryfall.mana_cost || 
-                         (Array.isArray(card._scryfall.card_faces) && card._scryfall.card_faces[0] ? card._scryfall.card_faces[0].mana_cost : null);
+        let manaCost;
+        if (state.multiFaceMode === "front" && Array.isArray(card._scryfall.card_faces) && card._scryfall.card_faces[0]) {
+            // Always use front face in "front" mode
+            manaCost = card._scryfall.card_faces[0].mana_cost;
+        } else {
+            // Use top-level or fall back to first face
+            manaCost = card._scryfall.mana_cost || 
+                       (Array.isArray(card._scryfall.card_faces) && card._scryfall.card_faces[0] ? card._scryfall.card_faces[0].mana_cost : null);
+        }
         if (manaCost) {
             const colorMatches = String(manaCost).match(/[WUBRGC]/gi) || [];
             sourceColors = [...new Set(colorMatches.map(c => c.toUpperCase()))];
@@ -1103,7 +1128,9 @@ function matchesColorFilter(card, colorFilters, colorMode, colorSource) {
 function getSortScryfall(card) {
     if (!card || !card._scryfall) return null;
     const faces = card._scryfall.card_faces;
-    if (Array.isArray(faces) && faces.length > 0) return faces[0];
+    if (state.multiFaceMode === "front" && Array.isArray(faces) && faces.length > 0) {
+        return faces[0];
+    }
     return card._scryfall;
 }
 
@@ -1535,6 +1562,17 @@ function resetFilters() {
     elements.filterCMCOperator.value = "";
     elements.filterCMCValue.value = "";
     elements.filterCardTypeSelect.value = "";
+    
+    if (elements.multiFaceModeSelect) {
+        elements.multiFaceModeSelect.value = "front";
+        state.multiFaceMode = "front";
+        // Re-apply Scryfall data to recalculate card types
+        state.allCards.forEach(card => {
+            if (card._scryfall) {
+                applyScryfallDataToCard(card, card._scryfall);
+            }
+        });
+    }
 
     state.formatFilters = [];
     state.sortCriteria = [];
@@ -1570,7 +1608,8 @@ function getCurrentFilterState() {
             foil: elements.filterFoilSelect.value,
             cmcOperator: elements.filterCMCOperator.value,
             cmcValue: elements.filterCMCValue.value,
-            cardType: elements.filterCardTypeSelect.value
+            cardType: elements.filterCardTypeSelect.value,
+            multiFaceMode: state.multiFaceMode
         },
         display: {
             legalityFormats: getSelectedLegalityDisplayFormats()
@@ -1659,6 +1698,17 @@ function loadSelectedConfig() {
     elements.filterCMCOperator.value = config.filters.cmcOperator || "";
     elements.filterCMCValue.value = config.filters.cmcValue || "";
     elements.filterCardTypeSelect.value = config.filters.cardType || "";
+    
+    if (elements.multiFaceModeSelect) {
+        elements.multiFaceModeSelect.value = config.filters.multiFaceMode || "front";
+        state.multiFaceMode = elements.multiFaceModeSelect.value;
+        // Re-apply Scryfall data with the loaded setting
+        state.allCards.forEach(card => {
+            if (card._scryfall) {
+                applyScryfallDataToCard(card, card._scryfall);
+            }
+        });
+    }
 
     if (elements.legalityDisplayList) {
         const selectedLegalityFormats = new Set((config.display && config.display.legalityFormats) || []);
@@ -1801,6 +1851,19 @@ function attachEventListeners() {
         if (!control || control === elements.savedConfigsSelect) return;
         control.addEventListener("change", () => scheduleApplyFilters());
     });
+
+    if (elements.multiFaceModeSelect) {
+        elements.multiFaceModeSelect.addEventListener("change", () => {
+            state.multiFaceMode = elements.multiFaceModeSelect.value;
+            // Re-apply Scryfall data to recalculate card types with new setting
+            state.allCards.forEach(card => {
+                if (card._scryfall) {
+                    applyScryfallDataToCard(card, card._scryfall);
+                }
+            });
+            scheduleApplyFilters();
+        });
+    }
 
     if (elements.filterCMCValue) {
         elements.filterCMCValue.addEventListener("input", () => scheduleApplyFilters());

@@ -1,5 +1,5 @@
 // Version pattern is yyyy.MM.feature.patch
-const APP_VERSION = "2026.3.7.1";
+const APP_VERSION = "2026.3.8.0";
 
 const CONDITION_CODE_MAP = {
     "mint": { code: "mt", label: "Mint" },
