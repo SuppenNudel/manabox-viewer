@@ -865,17 +865,26 @@ function getSortValue(card, sortField) {
         case "binder":
             return (card["Binder Name"] || "").toLowerCase();
         case "cmc":
-            return card._scryfall && card._scryfall.cmc !== undefined ? card._scryfall.cmc : 0;
+            {
+                const topLevel = card._scryfall && card._scryfall.cmc !== undefined ? card._scryfall.cmc : undefined;
+                if (topLevel !== undefined) return topLevel;
+                const scryfall = getSortScryfall(card);
+                return scryfall && scryfall.cmc !== undefined ? scryfall.cmc : 0;
+            }
         case "type": {
             const order = { planeswalker: 1, creature: 2, artifact: 3, instant: 4, sorcery: 5, enchantment: 6, land: 7, battle: 8 };
-            const types = card._cardTypes || [];
+            const scryfall = getSortScryfall(card);
+            const types = scryfall ? extractCardTypes(scryfall.type_line || "") : (card._cardTypes || []);
+            if (types.includes("creature")) {
+                return order.creature;
+            }
             for (const type of types) {
                 if (order[type] !== undefined) return order[type];
             }
             return 999;
         }
         case "color": {
-            const colors = getCardColors(card) || [];
+            const colors = getSortColors(card) || [];
             const uniqueSorted = [...new Set(colors)].sort((a, b) => COLOR_ORDER.indexOf(a) - COLOR_ORDER.indexOf(b));
             const colorKey = uniqueSorted.join("");
             const count = uniqueSorted.length;
@@ -891,7 +900,7 @@ function getSortValue(card, sortField) {
             return `${String(count).padStart(2, "0")}-${String(comboRank).padStart(3, "0")}-${colorKey || "z"}`;
         }
         case "mana_cost_colors": {
-            const colors = getCardColors(card, "mana_cost") || [];
+            const colors = getSortColors(card, "mana_cost") || [];
             const uniqueSorted = [...new Set(colors)].sort((a, b) => COLOR_ORDER.indexOf(a) - COLOR_ORDER.indexOf(b));
             const colorKey = uniqueSorted.join("");
             const count = uniqueSorted.length;
@@ -1089,6 +1098,55 @@ function matchesColorFilter(card, colorFilters, colorMode, colorSource) {
     }
 
     return selectedColors.every(color => filteredColors.includes(color));
+}
+
+function getSortScryfall(card) {
+    if (!card || !card._scryfall) return null;
+    const faces = card._scryfall.card_faces;
+    if (Array.isArray(faces) && faces.length > 0) return faces[0];
+    return card._scryfall;
+}
+
+function getSortColors(card, source = "colors") {
+    const scryfall = getSortScryfall(card);
+    if (!scryfall) return null;
+
+    const allowedColors = new Set(["w", "u", "b", "r", "g", "c"]);
+    let sourceColors = [];
+    if (source === "identity") {
+        sourceColors = Array.isArray(scryfall.color_identity) ? scryfall.color_identity : [];
+    } else if (source === "produces") {
+        sourceColors = Array.isArray(scryfall.produced_mana) ? scryfall.produced_mana : [];
+    } else if (source === "mana_cost") {
+        const manaCost = scryfall.mana_cost;
+        if (manaCost) {
+            const colorMatches = String(manaCost).match(/[WUBRGC]/gi) || [];
+            sourceColors = [...new Set(colorMatches.map(color => color.toUpperCase()))];
+        }
+    } else {
+        sourceColors = Array.isArray(scryfall.colors) ? scryfall.colors : [];
+    }
+
+    const producesMana = Array.isArray(scryfall.produced_mana) ? scryfall.produced_mana : [];
+    const colors = new Set();
+
+    sourceColors.forEach(color => {
+        const normalized = String(color).toLowerCase();
+        if (allowedColors.has(normalized)) colors.add(normalized);
+    });
+
+    if (source !== "produces" && source !== "mana_cost") {
+        producesMana.forEach(color => {
+            const normalized = String(color).toLowerCase();
+            if (allowedColors.has(normalized)) colors.add(normalized);
+        });
+    }
+
+    if (colors.size === 0) {
+        colors.add("c");
+    }
+
+    return Array.from(colors);
 }
 
 function hasScryfallDependentFilters(filters) {
