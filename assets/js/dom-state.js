@@ -5,14 +5,15 @@ const state = {
     currentPage: 0,
     cardsPerPage: 80,
     formatFilters: [],
+    cardTypeFilters: [],
     sortCriteria: [],
     nextFormatId: 0,
+    nextCardTypeId: 0,
     nextSortId: 0,
     multiFaceMode: "front",
     scryfallObserver: null,
     scryfallCache: null,
     scryfallInFlight: new Map(),
-    scryfallQueryCache: new Map(),
     bulkRemoteMeta: null,
     bulkLocalUpdatedAt: null,
     bulkLoadingPromise: null,
@@ -21,7 +22,8 @@ const state = {
         "legacy", "pauper", "vintage", "penny", "commander", "oathbreaker",
         "brawl", "standardbrawl", "historicbrawl", "alchemy", "timeless",
         "paupercommander", "duel", "predh", "oldschool", "premodern"
-    ]
+    ],
+    availableCardTypes: []
 };
 
 const elements = {
@@ -42,7 +44,6 @@ const elements = {
     infoDialogCancel: document.getElementById("info-dialog-cancel"),
     infoDialogClose: document.getElementById("info-dialog-close"),
     searchNameInput: document.getElementById("search-name"),
-    scryfallQueryInput: document.getElementById("scryfall-query"),
     filterBinderNameSelect: document.getElementById("filter-binder-name"),
     filterBinderTypeSelect: document.getElementById("filter-binder-type"),
     filterRaritySelect: document.getElementById("filter-rarity"),
@@ -58,6 +59,8 @@ const elements = {
     filterCMCValue: document.getElementById("filter-cmc-value"),
     filterCardTypeSelect: document.getElementById("filter-card-type"),
     multiFaceModeSelect: document.getElementById("multi-face-mode"),
+    cardTypeFiltersContainer: document.getElementById("card-type-filters-container"),
+    addCardTypeFilterBtn: document.getElementById("add-card-type-filter"),
     formatFiltersContainer: document.getElementById("format-filters-container"),
     addFormatFilterBtn: document.getElementById("add-format-filter"),
     sortCriteriaContainer: document.getElementById("sort-criteria-container"),
@@ -74,8 +77,7 @@ const elements = {
     downloadListBtn: document.getElementById("download-list"),
     toggleDetailsBtn: document.getElementById("toggle-details"),
     enrichVisibleBtn: document.getElementById("enrich-visible"),
-    enrichStatus: document.getElementById("enrich-status"),
-    applyScryfallQueryBtn: document.getElementById("apply-scryfall-query")
+    enrichStatus: document.getElementById("enrich-status")
 };
 
 const dialogState = {

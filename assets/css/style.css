@@ -312,7 +312,8 @@ body {
     margin-bottom: 0.5rem;
 }
 
-.format-filter-row:first-child .filter-connector {
+#format-filters-container > .format-filter-row:first-child .filter-connector,
+#card-type-filters-container > .format-filter-row:first-child .filter-connector {
     visibility: hidden;
 }
 
@@ -323,6 +324,8 @@ body {
 .filter-connector,
 .filter-legality-type,
 .filter-format-select,
+.filter-card-type-mode,
+.filter-card-type-select,
 .sort-field-select,
 .sort-direction-select {
     width: 100%;
@@ -335,6 +338,7 @@ body {
 }
 
 .remove-format-filter,
+.remove-card-type-filter,
 .remove-sort-criteria {
     width: 34px;
     min-width: 34px;

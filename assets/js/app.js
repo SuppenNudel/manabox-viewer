@@ -759,6 +759,7 @@ async function loadCardTypesCatalog() {
         if (!response.ok) return;
         const data = await response.json();
         const types = (data.data || []).map(t => t.toLowerCase()).sort();
+        state.availableCardTypes = types;
         buildSelectOptions(elements.filterCardTypeSelect, types, getCardTypeLabel);
     } catch (error) {
         // Keep default empty if fetch fails.
@@ -860,6 +861,96 @@ function evaluateFormatFilters(card) {
     return result !== null ? result : true;
 }
 
+function createCardTypeFilterRow(filterId) {
+    const row = document.createElement("div");
+    row.className = "format-filter-row";
+    row.dataset.filterId = filterId;
+
+    const sortedTypes = [...state.availableCardTypes].sort((a, b) => {
+        return a.localeCompare(b);
+    });
+
+    row.innerHTML = `
+        <select class="filter-connector" data-filter-id="${filterId}">
+            <option value="and">AND</option>
+            <option value="or">OR</option>
+        </select>
+        <select class="filter-card-type-mode" data-filter-id="${filterId}">
+            <option value="is">Is</option>
+            <option value="is-not">Is not</option>
+        </select>
+        <select class="filter-card-type-select" data-filter-id="${filterId}">
+            <option value="">Select type</option>
+            ${sortedTypes.map(type => `<option value="${type}">${getCardTypeLabel(type)}</option>`).join("")}
+        </select>
+        <button class="remove-card-type-filter" data-filter-id="${filterId}" type="button">x</button>
+    `;
+
+    return row;
+}
+
+function addCardTypeFilter() {
+    const filterId = state.nextCardTypeId++;
+    state.cardTypeFilters.push({ id: filterId, connector: "and", mode: "is", cardType: "" });
+
+    const row = createCardTypeFilterRow(filterId);
+    elements.cardTypeFiltersContainer.appendChild(row);
+
+    row.querySelector(".filter-connector").addEventListener("change", e => {
+        const filter = state.cardTypeFilters.find(f => f.id === filterId);
+        if (filter) filter.connector = e.target.value;
+        scheduleApplyFilters();
+    });
+
+    row.querySelector(".filter-card-type-mode").addEventListener("change", e => {
+        const filter = state.cardTypeFilters.find(f => f.id === filterId);
+        if (filter) filter.mode = e.target.value;
+        scheduleApplyFilters();
+    });
+
+    row.querySelector(".filter-card-type-select").addEventListener("change", e => {
+        const filter = state.cardTypeFilters.find(f => f.id === filterId);
+        if (filter) filter.cardType = e.target.value;
+        scheduleApplyFilters();
+    });
+
+    row.querySelector(".remove-card-type-filter").addEventListener("click", () => removeCardTypeFilter(filterId));
+}
+
+function removeCardTypeFilter(filterId) {
+    state.cardTypeFilters = state.cardTypeFilters.filter(f => f.id !== filterId);
+    const row = elements.cardTypeFiltersContainer.querySelector(`[data-filter-id="${filterId}"]`);
+    if (row) row.remove();
+    scheduleApplyFilters();
+}
+
+function evaluateCardTypeFilters(card) {
+    if (state.cardTypeFilters.length === 0) return true;
+
+    const types = card._cardTypes || [];
+    let result = null;
+    state.cardTypeFilters.forEach(filter => {
+        if (!filter.cardType) return;
+        
+        let conditionResult = false;
+        if (filter.mode === "is") {
+            conditionResult = types.includes(filter.cardType);
+        } else {
+            conditionResult = !types.includes(filter.cardType);
+        }
+
+        if (result === null) {
+            result = conditionResult;
+        } else if (filter.connector === "and") {
+            result = result && conditionResult;
+        } else {
+            result = result || conditionResult;
+        }
+    });
+
+    return result !== null ? result : true;
+}
+
 function getSortValue(card, sortField) {
     switch (sortField) {
         case "name":
@@ -885,9 +976,18 @@ function getSortValue(card, sortField) {
             const order = { planeswalker: 1, creature: 2, artifact: 3, instant: 4, sorcery: 5, enchantment: 6, land: 7, battle: 8 };
             const scryfall = getSortScryfall(card);
             const types = scryfall ? extractCardTypes(scryfall.type_line || "") : (card._cardTypes || []);
+            
+            // Handle precedence: creature takes priority if present
             if (types.includes("creature")) {
                 return order.creature;
             }
+            
+            // Handle artifact precedence: for artifact enchantments, artifact takes priority
+            if (types.includes("artifact") && types.includes("enchantment")) {
+                return order.artifact;
+            }
+            
+            // Return the first type found in the order
             for (const type of types) {
                 if (order[type] !== undefined) return order[type];
             }
@@ -1179,11 +1279,11 @@ function getSortColors(card, source = "colors") {
 function hasScryfallDependentFilters(filters) {
     const hasCmcFilter = Boolean(filters.cmcOperator && filters.cmcValue);
     const hasCardTypeFilter = Boolean(filters.cardType);
+    const hasCardTypeFilters = state.cardTypeFilters.some(filter => filter.cardType);
     const hasColorFilter = Array.isArray(filters.color) && filters.color.length > 0;
     const hasColorCountFilter = Boolean(filters.colorCountOperator && filters.colorCount !== "");
-    const hasScryfallQueryFilter = Boolean(filters.scryfallQuery && filters.scryfallQuery.trim());
     const hasFormatFilter = state.formatFilters.some(filter => filter.format);
-    return hasCmcFilter || hasCardTypeFilter || hasColorFilter || hasColorCountFilter || hasScryfallQueryFilter || hasFormatFilter;
+    return hasCmcFilter || hasCardTypeFilter || hasCardTypeFilters || hasColorFilter || hasColorCountFilter || hasFormatFilter;
 }
 
 async function enrichCardsForScryfallFilters(cards) {
@@ -1223,16 +1323,8 @@ async function applyFilters() {
         foil: elements.filterFoilSelect.value.toLowerCase(),
         cmcOperator: elements.filterCMCOperator.value,
         cmcValue: elements.filterCMCValue.value,
-        cardType: elements.filterCardTypeSelect.value.toLowerCase(),
-        scryfallQuery: elements.scryfallQueryInput.value
+        cardType: elements.filterCardTypeSelect.value.toLowerCase()
     };
-
-    let scryfallMatchingIds = new Set();
-    if (filters.scryfallQuery && filters.scryfallQuery.trim()) {
-        setStatus("Scryfall: searching...");
-        scryfallMatchingIds = await searchScryfallByQuery(filters.scryfallQuery);
-        setStatus("Scryfall: idle");
-    }
 
     if (hasScryfallDependentFilters(filters)) {
         await enrichCardsForScryfallFilters(state.allCards);
@@ -1269,10 +1361,7 @@ async function applyFilters() {
             if (!types.includes(filters.cardType)) return false;
         }
 
-        if (scryfallMatchingIds.size > 0) {
-            const cardScryfallId = card["Scryfall ID"];
-            if (!cardScryfallId || !scryfallMatchingIds.has(cardScryfallId)) return false;
-        }
+        if (!evaluateCardTypeFilters(card)) return false;
 
         if (!evaluateFormatFilters(card)) return false;
 
@@ -1539,7 +1628,6 @@ async function updateBulkDataForCurrentCards() {
 
 function resetFilters() {
     elements.searchNameInput.value = "";
-    elements.scryfallQueryInput.value = "";
     elements.filterBinderNameSelect.value = "";
     elements.filterBinderTypeSelect.value = "";
     elements.filterRaritySelect.value = "";
@@ -1594,7 +1682,6 @@ function getCurrentFilterState() {
     return {
         filters: {
             name: elements.searchNameInput.value,
-            scryfallQuery: elements.scryfallQueryInput.value,
             binderName: elements.filterBinderNameSelect.value,
             binderType: elements.filterBinderTypeSelect.value,
             rarity: elements.filterRaritySelect.value,
@@ -1669,7 +1756,6 @@ function loadSelectedConfig() {
     if (!config) return;
 
     elements.searchNameInput.value = config.filters.name || "";
-    elements.scryfallQueryInput.value = config.filters.scryfallQuery || "";
     elements.filterBinderNameSelect.value = config.filters.binderName || "";
     elements.filterBinderTypeSelect.value = config.filters.binderType || "";
     elements.filterRaritySelect.value = config.filters.rarity || "";
@@ -1821,13 +1907,6 @@ function attachEventListeners() {
     }
 
     elements.searchNameInput.addEventListener("input", () => scheduleApplyFilters());
-    elements.applyScryfallQueryBtn.addEventListener("click", () => applyFilters());
-    elements.scryfallQueryInput.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            applyFilters();
-        }
-    });
 
     [
         elements.filterBinderNameSelect,
@@ -1866,6 +1945,7 @@ function attachEventListeners() {
     }
 
     elements.addFormatFilterBtn.addEventListener("click", addFormatFilter);
+    elements.addCardTypeFilterBtn.addEventListener("click", addCardTypeFilter);
     elements.addSortCriteriaBtn.addEventListener("click", addSortCriteria);
     elements.saveConfigBtn.addEventListener("click", saveCurrentConfig);
     elements.savedConfigsSelect.addEventListener("change", loadSelectedConfig);

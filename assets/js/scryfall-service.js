@@ -280,52 +280,6 @@ async function fetchScryfallCard(id, options = {}) {
     return request;
 }
 
-async function searchScryfallByQuery(query) {
-    if (!query || !query.trim()) return new Set();
-
-    const trimmedQuery = query.trim();
-    if (state.scryfallQueryCache.has(trimmedQuery)) {
-        return state.scryfallQueryCache.get(trimmedQuery);
-    }
-
-    const matchingIds = new Set();
-    let hasMore = true;
-    let cursor = null;
-
-    try {
-        while (hasMore) {
-            let url = `https://api.scryfall.com/cards/search?${new URLSearchParams({ q: trimmedQuery })}`;
-            if (cursor) {
-                url += `&page=${cursor}`;
-            }
-
-            const response = await fetch(url);
-            if (!response.ok) {
-                console.error(`Scryfall search failed: ${response.status}`);
-                state.scryfallQueryCache.set(trimmedQuery, new Set());
-                return new Set();
-            }
-
-            const data = await response.json();
-            if (data.data) {
-                data.data.forEach(card => {
-                    matchingIds.add(card.id);
-                });
-            }
-
-            hasMore = data.has_more ?? false;
-            cursor = (cursor || 0) + 1;
-        }
-    } catch (error) {
-        console.error("Scryfall search error:", error);
-        state.scryfallQueryCache.set(trimmedQuery, new Set());
-        return new Set();
-    }
-
-    state.scryfallQueryCache.set(trimmedQuery, matchingIds);
-    return matchingIds;
-}
-
 async function refreshBulkMetaStatus() {
     state.bulkLocalUpdatedAt = await getMetaValue(META_BULK_DEFAULT_CARDS_UPDATED_AT_KEY);
     try {

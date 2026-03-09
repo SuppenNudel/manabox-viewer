@@ -61,15 +61,6 @@
                     </div>
 
                     <div class="filter-group">
-                        <label for="scryfall-query">Scryfall Query</label>
-                        <div style="display: flex; gap: 4px;">
-                            <input type="text" id="scryfall-query" class="filter-input" placeholder='e.g., type:creature power>2' style="flex: 1;" />
-                            <button id="apply-scryfall-query" class="ghost-btn" type="button" style="width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" title="Search query">🔍</button>
-                        </div>
-                        <small style="display: block; margin-top: 4px; color: #888;">Use Scryfall syntax. Leave empty to disable. Press Enter or click Search.</small>
-                    </div>
-
-                    <div class="filter-group">
                         <label for="filter-binder-name">Binder Name</label>
                         <select id="filter-binder-name" class="filter-select">
                             <option value="">All Binders</option>
@@ -170,6 +161,12 @@
                         <select id="filter-card-type" class="filter-select">
                             <option value="">All Types</option>
                         </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Card Type Filters</label>
+                        <div id="card-type-filters-container"></div>
+                        <button id="add-card-type-filter" class="ghost-btn" type="button">+ Add Type Filter</button>
                     </div>
 
                     <div class="filter-group">
