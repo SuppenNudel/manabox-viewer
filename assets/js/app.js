@@ -1406,6 +1406,7 @@ function renderPage() {
         elements.cardsContainer.appendChild(button);
     }
 
+    setupCardImagePreview();
     setupScryfallObserver(cardsToShow);
 }
 
@@ -1434,11 +1435,14 @@ function createCardElement(card) {
     
     // Handle double-sided cards (card_faces) vs regular cards
     let imageUrl = "";
+    let largeImageUrl = "";
     if (card._scryfall) {
         if (card._scryfall.card_faces && card._scryfall.card_faces.length > 0 && card._scryfall.card_faces[0].image_uris) {
             imageUrl = card._scryfall.card_faces[0].image_uris.normal;
+            largeImageUrl = card._scryfall.card_faces[0].image_uris.large;
         } else if (card._scryfall.image_uris) {
             imageUrl = card._scryfall.image_uris.normal;
+            largeImageUrl = card._scryfall.image_uris.large;
         }
     }
     
@@ -1448,7 +1452,7 @@ function createCardElement(card) {
     const legalities = buildLegalities(card);
 
     const imageHtml = imageUrl
-        ? `<div class="card-image${isFoil ? " is-foil" : ""}"><img src="${imageUrl}" alt="${escapeHtml(displayName)}"></div>`
+        ? `<div class="card-image${isFoil ? " is-foil" : ""}" data-large-image="${escapeHtml(largeImageUrl)}"><img src="${imageUrl}" alt="${escapeHtml(displayName)}"></div>`
         : `<div class="card-image${isFoil ? " is-foil" : ""}">No image</div>`;
 
     return `
@@ -1539,6 +1543,59 @@ async function enrichCard(card, cardElement, options = {}) {
         const newHtml = createCardElement(card);
         cardElement.outerHTML = newHtml;
     }
+}
+
+function setupCardImagePreview() {
+    let previewElement = document.getElementById("card-image-preview");
+    if (!previewElement) {
+        previewElement = document.createElement("div");
+        previewElement.id = "card-image-preview";
+        previewElement.className = "card-image-preview";
+        document.body.appendChild(previewElement);
+    }
+
+    const cardImages = document.querySelectorAll(".card-image");
+    
+    cardImages.forEach(cardImage => {
+        if (cardImage.hasListener) return;
+        cardImage.hasListener = true;
+
+        cardImage.addEventListener("mouseenter", (e) => {
+            const largeImageUrl = cardImage.getAttribute("data-large-image");
+            if (!largeImageUrl) return;
+
+            previewElement.innerHTML = `<img src="${largeImageUrl}" alt="Card preview">`;
+            previewElement.classList.add("visible");
+
+            const updatePosition = () => {
+                const rect = cardImage.getBoundingClientRect();
+                const x = rect.right + 20;
+                const y = rect.top - 100;
+
+                previewElement.style.left = (x + window.scrollX) + "px";
+                previewElement.style.top = (y + window.scrollY) + "px";
+
+                // Adjust if preview goes off screen
+                const previewRect = previewElement.getBoundingClientRect();
+                if (previewRect.right > window.innerWidth) {
+                    previewElement.style.left = (rect.left - previewRect.width - 20 + window.scrollX) + "px";
+                }
+                if (previewRect.bottom > window.innerHeight) {
+                    previewElement.style.top = (rect.top + window.scrollY) + "px";
+                }
+            };
+
+            updatePosition();
+
+            const mouseMoveListener = () => updatePosition();
+            document.addEventListener("mousemove", mouseMoveListener);
+
+            cardImage.addEventListener("mouseleave", () => {
+                previewElement.classList.remove("visible");
+                document.removeEventListener("mousemove", mouseMoveListener);
+            }, { once: true });
+        });
+    });
 }
 
 function setupScryfallObserver(cards) {
