@@ -1724,6 +1724,11 @@ function getCurrentFilterState() {
             legalityType: f.legalityType,
             format: f.format
         })),
+        cardTypeFilters: state.cardTypeFilters.map(f => ({
+            connector: f.connector,
+            mode: f.mode,
+            cardType: f.cardType
+        })),
         sortCriteria: state.sortCriteria.map(s => ({
             field: s.field,
             direction: s.direction
@@ -1858,6 +1863,45 @@ function loadSelectedConfig() {
         });
 
         removeBtn.addEventListener("click", () => removeFormatFilter(filterId));
+    });
+
+    state.cardTypeFilters = [];
+    state.nextCardTypeId = 0;
+    elements.cardTypeFiltersContainer.innerHTML = "";
+
+    (config.cardTypeFilters || []).forEach(filter => {
+        const filterId = state.nextCardTypeId++;
+        state.cardTypeFilters.push({ id: filterId, connector: filter.connector, mode: filter.mode, cardType: filter.cardType });
+        const row = createCardTypeFilterRow(filterId);
+        elements.cardTypeFiltersContainer.appendChild(row);
+        const connectorSelect = row.querySelector(".filter-connector");
+        const modeSelect = row.querySelector(".filter-card-type-mode");
+        const cardTypeSelect = row.querySelector(".filter-card-type-select");
+        const removeBtn = row.querySelector(".remove-card-type-filter");
+
+        connectorSelect.value = filter.connector;
+        modeSelect.value = filter.mode;
+        cardTypeSelect.value = filter.cardType;
+
+        connectorSelect.addEventListener("change", e => {
+            const target = state.cardTypeFilters.find(f => f.id === filterId);
+            if (target) target.connector = e.target.value;
+            scheduleApplyFilters();
+        });
+
+        modeSelect.addEventListener("change", e => {
+            const target = state.cardTypeFilters.find(f => f.id === filterId);
+            if (target) target.mode = e.target.value;
+            scheduleApplyFilters();
+        });
+
+        cardTypeSelect.addEventListener("change", e => {
+            const target = state.cardTypeFilters.find(f => f.id === filterId);
+            if (target) target.cardType = e.target.value;
+            scheduleApplyFilters();
+        });
+
+        removeBtn.addEventListener("click", () => removeCardTypeFilter(filterId));
     });
 
     state.sortCriteria = [];
