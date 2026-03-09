@@ -1787,10 +1787,6 @@ function loadSelectedConfig() {
         removeBtn.addEventListener("click", () => removeSortCriteria(sortId));
     });
 
-    if (state.displayedCards.length > 0) {
-        renderPage();
-    }
-
     applyFilters();
 }
 
