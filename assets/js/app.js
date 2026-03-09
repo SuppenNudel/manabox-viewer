@@ -991,6 +991,14 @@ function getCardColors(card, source = "colors") {
         sourceColors = getColorField("color_identity");
     } else if (source === "produces") {
         sourceColors = getColorField("produced_mana");
+    } else if (source === "mana_cost") {
+        // Parse mana cost string like "{2}{W}{U}" to extract color symbols
+        const manaCost = card._scryfall.mana_cost || 
+                         (Array.isArray(card._scryfall.card_faces) && card._scryfall.card_faces[0] ? card._scryfall.card_faces[0].mana_cost : null);
+        if (manaCost) {
+            const colorMatches = String(manaCost).match(/[WUBRGC]/gi) || [];
+            sourceColors = [...new Set(colorMatches.map(c => c.toUpperCase()))];
+        }
     } else {
         sourceColors = getColorField("colors");
     }
@@ -1002,7 +1010,7 @@ function getCardColors(card, source = "colors") {
         if (allowedColors.has(normalized)) colors.add(normalized);
     });
 
-    if (source !== "produces") {
+    if (source !== "produces" && source !== "mana_cost") {
         producesMana.forEach(color => {
             const normalized = String(color).toLowerCase();
             if (allowedColors.has(normalized)) colors.add(normalized);

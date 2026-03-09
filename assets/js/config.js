@@ -1,4 +1,4 @@
-const APP_VERSION = "2026.3.5";
+const APP_VERSION = "2026.3.9";
 
 const CONDITION_CODE_MAP = {
     "mint": { code: "mt", label: "Mint" },
