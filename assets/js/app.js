@@ -890,6 +890,22 @@ function getSortValue(card, sortField) {
 
             return `${String(count).padStart(2, "0")}-${String(comboRank).padStart(3, "0")}-${colorKey || "z"}`;
         }
+        case "mana_cost_colors": {
+            const colors = getCardColors(card, "mana_cost") || [];
+            const uniqueSorted = [...new Set(colors)].sort((a, b) => COLOR_ORDER.indexOf(a) - COLOR_ORDER.indexOf(b));
+            const colorKey = uniqueSorted.join("");
+            const count = uniqueSorted.length;
+
+            let comboRank = 999;
+            if (count === 0) comboRank = 0;
+            else if (count === 1) comboRank = COLOR_ORDER.indexOf(colorKey) + 1;
+            else if (count === 2) comboRank = TWO_COLOR_RANK.get(colorKey) || 999;
+            else if (count === 3) comboRank = THREE_COLOR_RANK.get(colorKey) || 999;
+            else if (count === 4) comboRank = FOUR_COLOR_RANK.get(colorKey) || 999;
+            else if (count === 5) comboRank = 1;
+
+            return `${String(count).padStart(2, "0")}-${String(comboRank).padStart(3, "0")}-${colorKey || "z"}`;
+        }
         default:
             return "";
     }
@@ -931,6 +947,7 @@ function createSortCriteriaRow(sortId, isFirst) {
             <option value="cmc">Mana Value (CMC)</option>
             <option value="type">Card Type</option>
             <option value="color">Color</option>
+            <option value="mana_cost_colors">Mana Cost Colors</option>
         </select>
         <select class="sort-direction-select" data-sort-id="${sortId}">
             <option value="asc">Ascending</option>
