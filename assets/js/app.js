@@ -974,16 +974,27 @@ function removeSortCriteria(sortId) {
 function getCardColors(card, source = "colors") {
     if (!card._scryfall) return null;
 
+    const getColorField = field => {
+        const topLevel = card._scryfall[field];
+        if (Array.isArray(topLevel) && topLevel.length > 0) {
+            return topLevel;
+        }
+
+        const firstFace = Array.isArray(card._scryfall.card_faces) ? card._scryfall.card_faces[0] : null;
+        const faceValue = firstFace ? firstFace[field] : null;
+        return Array.isArray(faceValue) ? faceValue : [];
+    };
+
     const allowedColors = new Set(["w", "u", "b", "r", "g", "c"]);
     let sourceColors = [];
     if (source === "identity") {
-        sourceColors = Array.isArray(card._scryfall.color_identity) ? card._scryfall.color_identity : [];
+        sourceColors = getColorField("color_identity");
     } else if (source === "produces") {
-        sourceColors = Array.isArray(card._scryfall.produced_mana) ? card._scryfall.produced_mana : [];
+        sourceColors = getColorField("produced_mana");
     } else {
-        sourceColors = Array.isArray(card._scryfall.colors) ? card._scryfall.colors : [];
+        sourceColors = getColorField("colors");
     }
-    const producesMana = Array.isArray(card._scryfall.produced_mana) ? card._scryfall.produced_mana : [];
+    const producesMana = getColorField("produced_mana");
     const colors = new Set();
 
     sourceColors.forEach(color => {
@@ -1215,6 +1226,8 @@ function createCardElement(card) {
     const keyruneRarityClass = keyruneRarityClassMap[rarityKey] || "ss-common";
     const conditionKey = (card["Condition"] || "").toLowerCase().replace(/\s+/g, "_");
     const conditionData = CONDITION_CODE_MAP[conditionKey] || { code: "un", label: card["Condition"] || "Unknown" };
+    const pageLang = (document.documentElement.lang || "en").split("-")[0];
+    const conditionHelpUrl = `https://help.cardmarket.com/${pageLang}/CardCondition`;
     const languageKey = normalizeLanguage(card["Language"] || "");
     const languageIcon = LANGUAGE_ICONS[languageKey] || { icon: "🌐", label: card["Language"] || "Unknown" };
 
@@ -1250,7 +1263,7 @@ function createCardElement(card) {
 
                 <div class="card-metadata">
                     <span class="badge-icon" title="${escapeHtml(rarityIcon.label)}">${rarityIcon.icon}</span>
-                    <a href="https://help.cardmarket.com/en/CardCondition" target="_blank" rel="noopener noreferrer" class="article-condition condition-${conditionData.code}" title="${escapeHtml(conditionData.label)}"><span class="badge">${escapeHtml(conditionData.code.toUpperCase())}</span></a>
+                    <a href="${conditionHelpUrl}" target="_blank" rel="noopener noreferrer" class="article-condition condition-${conditionData.code}" title="${escapeHtml(conditionData.label)}"><span class="badge">${escapeHtml(conditionData.code.toUpperCase())}</span></a>
                     <span class="badge-icon" title="${escapeHtml(languageIcon.label)}">${languageIcon.icon}</span>
                     ${isFoil ? '<span class="badge-icon" title="Foil">⭐</span>' : ''}
                 </div>
