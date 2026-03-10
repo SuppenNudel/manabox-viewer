@@ -1,5 +1,5 @@
 // Version pattern is yyyy.MM.feature.patch
-const APP_VERSION = "2026.3.9.0";
+const APP_VERSION = "2026.3.10.0";
 
 const CONDITION_CODE_MAP = {
     "mint": { code: "mt", label: "Mint" },
@@ -82,6 +82,15 @@ const CARDMARKET_LANGUAGE_MAP = {
 const SCRYFALL_DEFAULT_CARDS_META_URL = "https://api.scryfall.com/bulk-data/default_cards";
 const META_BULK_DEFAULT_CARDS_UPDATED_AT_KEY = "bulk_default_cards_updated_at";
 const LEGALITY_DISPLAY_SETTINGS_KEY = "mtg_legality_display_settings";
+const MTGTOP8_CACHE_DURATION_MS = 24 * 60 * 60 * 1000;
+const MTGTOP8_CACHE_KEY_PREFIX = "mtg_mtgtop8_format_";
+const MTGTOP8_FORMAT_MAP = {
+    standard: "Standard",
+    pioneer: "Pioneer",
+    modern: "Modern",
+    legacy: "Legacy",
+    pauper: "Pauper"
+};
 
 const FORMAT_LABELS = {
     standard: "Standard",

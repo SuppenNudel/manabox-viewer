@@ -1406,7 +1406,6 @@ function renderPage() {
         elements.cardsContainer.appendChild(button);
     }
 
-    setupCardImagePreview();
     setupScryfallObserver(cardsToShow);
 }
 
@@ -1509,6 +1508,162 @@ function createCardElement(card) {
     `;
 }
 
+function getMtgtop8StorageKey(formatKey) {
+    return `${MTGTOP8_CACHE_KEY_PREFIX}${formatKey}`;
+}
+
+function isMtgtop8CacheFresh(timestamp) {
+    if (!timestamp) return false;
+    return (Date.now() - Number(timestamp)) < MTGTOP8_CACHE_DURATION_MS;
+}
+
+function readMtgtop8StorageCache(formatKey) {
+    try {
+        const raw = localStorage.getItem(getMtgtop8StorageKey(formatKey));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !isMtgtop8CacheFresh(parsed.timestamp)) {
+            return null;
+        }
+        return parsed.data || null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function writeMtgtop8StorageCache(formatKey, data) {
+    try {
+        localStorage.setItem(getMtgtop8StorageKey(formatKey), JSON.stringify({
+            timestamp: Date.now(),
+            data
+        }));
+    } catch (error) {
+        // Ignore storage quota errors.
+    }
+}
+
+function scheduleMtgtop8Rerender() {
+    if (state.mtgtop8UpdateScheduled) return;
+    state.mtgtop8UpdateScheduled = true;
+
+    setTimeout(() => {
+        state.mtgtop8UpdateScheduled = false;
+        if (Array.isArray(state.displayedCards) && state.displayedCards.length > 0) {
+            renderPage();
+        }
+    }, 60);
+}
+
+async function loadMtgtop8FormatData(formatKey) {
+    if (!MTGTOP8_FORMAT_MAP[formatKey]) return null;
+
+    if (state.mtgtop8Cache.has(formatKey)) {
+        return state.mtgtop8Cache.get(formatKey);
+    }
+
+    const cachedStorageData = readMtgtop8StorageCache(formatKey);
+    if (cachedStorageData) {
+        state.mtgtop8Cache.set(formatKey, cachedStorageData);
+        return cachedStorageData;
+    }
+
+    if (state.mtgtop8InFlight.has(formatKey)) {
+        return state.mtgtop8InFlight.get(formatKey);
+    }
+
+    const mtgtop8FormatName = MTGTOP8_FORMAT_MAP[formatKey];
+    const url = `https://raw.githubusercontent.com/SuppenNudel/mtgtop8-topcards/refs/heads/main/${mtgtop8FormatName}.json`;
+
+    const requestPromise = fetch(url)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Failed to fetch ${mtgtop8FormatName} playrate data`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            state.mtgtop8Cache.set(formatKey, data || null);
+            writeMtgtop8StorageCache(formatKey, data || null);
+            scheduleMtgtop8Rerender();
+            return data || null;
+        })
+        .catch(() => {
+            state.mtgtop8Cache.set(formatKey, null);
+            return null;
+        })
+        .finally(() => {
+            state.mtgtop8InFlight.delete(formatKey);
+        });
+
+    state.mtgtop8InFlight.set(formatKey, requestPromise);
+    return requestPromise;
+}
+
+function ensureMtgtop8DataForFormats(formatKeys) {
+    const supportedFormats = Array.from(new Set((formatKeys || []).filter(formatKey => MTGTOP8_FORMAT_MAP[formatKey])));
+    supportedFormats.forEach(formatKey => {
+        loadMtgtop8FormatData(formatKey);
+    });
+}
+
+function getMtgtop8CardNameCandidates(card) {
+    const names = new Set();
+    const addCandidate = value => {
+        const name = String(value || "").trim();
+        if (!name) return;
+        names.add(name.replace(/\s*\/\/\s*/g, "/"));
+    };
+
+    addCandidate(card && card["Name"]);
+
+    const scryfall = card && card._scryfall;
+    if (scryfall) {
+        addCandidate(scryfall.name);
+
+        const layout = String(scryfall.layout || "").toLowerCase();
+        if (["adventure", "transform"].includes(layout) && Array.isArray(scryfall.card_faces) && scryfall.card_faces[0]) {
+            addCandidate(scryfall.card_faces[0].name);
+        }
+    }
+
+    return Array.from(names);
+}
+
+function getCardPlayrateForFormat(card, formatKey) {
+    const formatData = state.mtgtop8Cache.get(formatKey);
+    if (!formatData) return null;
+
+    const candidates = getMtgtop8CardNameCandidates(card);
+    for (const candidate of candidates) {
+        if (formatData[candidate]) {
+            const hit = formatData[candidate];
+            const parsedMain = hit.mainboard ? Number(hit.mainboard.decks) : NaN;
+            const parsedSide = hit.sideboard ? Number(hit.sideboard.decks) : NaN;
+            const mainRate = Number.isFinite(parsedMain) ? parsedMain : null;
+            const sideRate = Number.isFinite(parsedSide) ? parsedSide : null;
+            const parsedMainAvg = hit.mainboard ? Number(hit.mainboard.avg) : NaN;
+            const parsedSideAvg = hit.sideboard ? Number(hit.sideboard.avg) : NaN;
+            const mainAvg = Number.isFinite(parsedMainAvg) ? parsedMainAvg : null;
+            const sideAvg = Number.isFinite(parsedSideAvg) ? parsedSideAvg : null;
+            return { mainRate, sideRate, mainAvg, sideAvg };
+        }
+    }
+
+    return null;
+}
+
+function formatPlayrateLine(playrate) {
+    if (!playrate) return "";
+
+    const mainDecks = playrate.mainRate !== null ? `${(playrate.mainRate * 100).toFixed(1)}%` : "-";
+    const mainAvg = playrate.mainAvg !== null ? String(playrate.mainAvg) : "-";
+    const sideDecks = playrate.sideRate !== null ? `${(playrate.sideRate * 100).toFixed(1)}%` : "-";
+    const sideAvg = playrate.sideAvg !== null ? String(playrate.sideAvg) : "-";
+
+    if (mainDecks === "-" && sideDecks === "-") return "";
+    return `${mainDecks} (${mainAvg}) / ${sideDecks} (${sideAvg})`;
+}
+
 function buildLegalities(card) {
     if (!card._scryfall || !card._scryfall.legalities) return "";
     const selectedDisplayFormats = new Set(getSelectedLegalityDisplayFormats());
@@ -1522,9 +1677,15 @@ function buildLegalities(card) {
 
     if (entries.length === 0) return "";
 
+    ensureMtgtop8DataForFormats(entries.map(([format]) => format));
+
     return entries.map(([format, status]) => {
         const statusClass = status === "legal" ? "legal" : status;
-        return `<span class="legality-item ${statusClass}">${escapeHtml(getFormatLabel(format))}</span>`;
+        const playrate = (status === "legal" || status === "restricted")
+            ? getCardPlayrateForFormat(card, format)
+            : null;
+        const playrateLine = formatPlayrateLine(playrate);
+        return `<span class="legality-item ${statusClass}"><span class="legality-format">${escapeHtml(getFormatLabel(format))}</span>${playrateLine ? `<span class="legality-playrate">${escapeHtml(playrateLine)}</span>` : ""}</span>`;
     }).join("");
 }
 

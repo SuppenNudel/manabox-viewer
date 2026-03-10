@@ -591,6 +591,8 @@ body {
     padding: 0.9rem;
     box-shadow: var(--shadow);
     border: 1px solid var(--border-color);
+    position: relative;
+    overflow: visible;
 }
 
 .card-image {
@@ -606,11 +608,14 @@ body {
     color: var(--ink-soft);
     position: relative;
     cursor: pointer;
-    transition: transform 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transform-origin: center center;
 }
 
 .card-image:hover {
-    transform: scale(1.05);
+    transform: scale(2.142857);
+    z-index: 6;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
 }
 
 .card-image img {
@@ -734,13 +739,25 @@ body {
 
 .legality-item {
     display: inline-flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
     border-radius: 999px;
     padding: 0.2rem 0.55rem;
     font-weight: 700;
     letter-spacing: 0.01em;
     line-height: 1.2;
     border: 1px solid transparent;
+}
+
+.legality-format {
+    font-weight: 700;
+}
+
+.legality-playrate {
+    margin-top: 0.08rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    opacity: 0.95;
 }
 
 .legality-item.legal {
@@ -810,6 +827,10 @@ body {
 .compact-view .card-image {
     width: 96px;
     height: 134px;
+}
+
+.compact-view .card-image:hover {
+    transform: scale(3.125);
 }
 
 @media (max-width: 1100px) {
