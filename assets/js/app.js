@@ -1153,20 +1153,12 @@ function getCardColors(card, source = "colors") {
     } else {
         sourceColors = getColorField("colors");
     }
-    const producesMana = getColorField("produced_mana");
     const colors = new Set();
 
     sourceColors.forEach(color => {
         const normalized = String(color).toLowerCase();
         if (allowedColors.has(normalized)) colors.add(normalized);
     });
-
-    if (source !== "produces" && source !== "mana_cost") {
-        producesMana.forEach(color => {
-            const normalized = String(color).toLowerCase();
-            if (allowedColors.has(normalized)) colors.add(normalized);
-        });
-    }
 
     if (colors.size === 0) {
         colors.add("c");
@@ -1254,20 +1246,12 @@ function getSortColors(card, source = "colors") {
         sourceColors = Array.isArray(scryfall.colors) ? scryfall.colors : [];
     }
 
-    const producesMana = Array.isArray(scryfall.produced_mana) ? scryfall.produced_mana : [];
     const colors = new Set();
 
     sourceColors.forEach(color => {
         const normalized = String(color).toLowerCase();
         if (allowedColors.has(normalized)) colors.add(normalized);
     });
-
-    if (source !== "produces" && source !== "mana_cost") {
-        producesMana.forEach(color => {
-            const normalized = String(color).toLowerCase();
-            if (allowedColors.has(normalized)) colors.add(normalized);
-        });
-    }
 
     if (colors.size === 0) {
         colors.add("c");
