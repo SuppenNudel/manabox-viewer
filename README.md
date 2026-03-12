@@ -6,7 +6,7 @@ No backend is required: the app runs fully client-side with HTML, CSS, and JavaS
 
 ## Use the app online
 
-- Open directly in your browser: [HTML Preview (Live App)](https://htmlpreview.github.io/?https://github.com/SuppenNudel/manabox-viewer/blob/main/index.html)
+- Open directly in your browser: [HTML Preview (Live App)](https://suppennudel.github.io/manabox-viewer/)
 
 ## Run locally
 
