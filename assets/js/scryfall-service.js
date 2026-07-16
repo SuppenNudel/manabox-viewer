@@ -1,3 +1,38 @@
+// Rate limiter for api.scryfall.com — max 10 req/sec (100ms between requests).
+// All direct API fetches must go through scryfallApiFetch.
+const scryfallApiQueue = (() => {
+    const MIN_INTERVAL = 100; // ms between requests
+    let lastRequestAt = 0;
+    let pending = Promise.resolve();
+
+    return {
+        fetch(url, options) {
+            const result = pending.then(async () => {
+                const wait = Math.max(0, lastRequestAt + MIN_INTERVAL - Date.now());
+                if (wait > 0) await new Promise(r => setTimeout(r, wait));
+                lastRequestAt = Date.now();
+
+                const response = await fetch(url, options);
+
+                if (response.status === 429) {
+                    const BACKOFF_MS = 30_000;
+                    console.warn(`Scryfall: rate limited (429) on ${url} — backing off ${BACKOFF_MS / 1000}s`);
+                    lastRequestAt = Date.now() + BACKOFF_MS;
+                    await new Promise(r => setTimeout(r, BACKOFF_MS));
+                    lastRequestAt = Date.now();
+                    return fetch(url, options);
+                }
+
+                return response;
+            });
+
+            // Chain pending so the next queued request waits for this one to finish
+            pending = result.then(() => {}, () => {});
+            return result;
+        }
+    };
+})();
+
 async function openScryfallCache() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open("manabox-viewer", 3);
@@ -222,7 +257,7 @@ async function storeBulkCards(cards) {
 }
 
 async function fetchDefaultCardsMeta() {
-    const response = await fetch(SCRYFALL_DEFAULT_CARDS_META_URL);
+    const response = await scryfallApiQueue.fetch(SCRYFALL_DEFAULT_CARDS_META_URL);
     if (!response.ok) return null;
     return response.json();
 }
@@ -264,7 +299,7 @@ async function fetchScryfallCard(id, options = {}) {
 
     if (cacheOnly) return null;
 
-    const request = fetch(`https://api.scryfall.com/cards/${id}`)
+    const request = scryfallApiQueue.fetch(`https://api.scryfall.com/cards/${id}`)
         .then(response => response.ok ? response.json() : null)
         .then(data => {
             if (data) setCachedScryfall(data);

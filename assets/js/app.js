@@ -755,7 +755,7 @@ function loadFilterOptions(cards) {
 
 async function loadCardTypesCatalog() {
     try {
-        const response = await fetch("https://api.scryfall.com/catalog/card-types");
+        const response = await scryfallApiQueue.fetch("https://api.scryfall.com/catalog/card-types");
         if (!response.ok) return;
         const data = await response.json();
         const types = (data.data || []).map(t => t.toLowerCase()).sort();
@@ -1010,20 +1010,58 @@ function getSortValue(card, sortField) {
             return `${String(count).padStart(2, "0")}-${String(comboRank).padStart(3, "0")}-${colorKey || "z"}`;
         }
         case "mana_cost_colors": {
+            const scryfall = getSortScryfall(card);
+            const isLand = scryfall && typeof scryfall.type_line === "string" && /\bland\b/i.test(scryfall.type_line);
+
+            if (isLand) {
+                // Sort lands by what colors of mana they can produce
+                const produced = getSortColors(card, "produces") || [];
+                const realProduced = produced.filter(c => c !== "c");
+                const uniqueSorted = [...new Set(realProduced)].sort((a, b) => COLOR_ORDER.indexOf(a) - COLOR_ORDER.indexOf(b));
+                const colorKey = uniqueSorted.join("");
+                const count = uniqueSorted.length;
+
+                let subGroup, comboRank;
+                if (count === 0) {
+                    subGroup = "03"; comboRank = 1; // colorless/no-production land
+                } else if (count === 1) {
+                    subGroup = "01"; comboRank = COLOR_ORDER.indexOf(colorKey) + 1;
+                } else {
+                    subGroup = "02";
+                    if (count === 2) comboRank = TWO_COLOR_RANK.get(colorKey) || 999;
+                    else if (count === 3) comboRank = THREE_COLOR_RANK.get(colorKey) || 999;
+                    else if (count === 4) comboRank = FOUR_COLOR_RANK.get(colorKey) || 999;
+                    else if (count === 5) comboRank = 1;
+                    else comboRank = 999;
+                }
+
+                return `04-${subGroup}-${String(comboRank).padStart(3, "0")}-${colorKey || "c"}`;
+            }
+
             const colors = getSortColors(card, "mana_cost") || [];
             const uniqueSorted = [...new Set(colors)].sort((a, b) => COLOR_ORDER.indexOf(a) - COLOR_ORDER.indexOf(b));
             const colorKey = uniqueSorted.join("");
             const count = uniqueSorted.length;
 
+            // Colorless (non-land cards with no color in mana cost)
+            if (colorKey === "c") {
+                return `03-01-001-c`;
+            }
+
+            if (count === 1) {
+                // Single non-colorless color (W/U/B/R/G)
+                const rank = COLOR_ORDER.indexOf(colorKey) + 1;
+                return `01-01-${String(rank).padStart(3, "0")}-${colorKey}`;
+            }
+
+            // Multi-color
             let comboRank = 999;
-            if (count === 0) comboRank = 0;
-            else if (count === 1) comboRank = COLOR_ORDER.indexOf(colorKey) + 1;
-            else if (count === 2) comboRank = TWO_COLOR_RANK.get(colorKey) || 999;
+            if (count === 2) comboRank = TWO_COLOR_RANK.get(colorKey) || 999;
             else if (count === 3) comboRank = THREE_COLOR_RANK.get(colorKey) || 999;
             else if (count === 4) comboRank = FOUR_COLOR_RANK.get(colorKey) || 999;
             else if (count === 5) comboRank = 1;
 
-            return `${String(count).padStart(2, "0")}-${String(comboRank).padStart(3, "0")}-${colorKey || "z"}`;
+            return `02-${String(count).padStart(2, "0")}-${String(comboRank).padStart(3, "0")}-${colorKey}`;
         }
         default:
             return "";
@@ -1149,6 +1187,9 @@ function getCardColors(card, source = "colors") {
         if (manaCost) {
             const colorMatches = String(manaCost).match(/[WUBRGC]/gi) || [];
             sourceColors = [...new Set(colorMatches.map(c => c.toUpperCase()))];
+        } else {
+            // No mana cost (e.g. lands) — fall back to card colors
+            sourceColors = getColorField("colors");
         }
     } else {
         sourceColors = getColorField("colors");
@@ -1241,6 +1282,9 @@ function getSortColors(card, source = "colors") {
         if (manaCost) {
             const colorMatches = String(manaCost).match(/[WUBRGC]/gi) || [];
             sourceColors = [...new Set(colorMatches.map(color => color.toUpperCase()))];
+        } else {
+            // No mana cost (e.g. lands) — fall back to card colors
+            sourceColors = Array.isArray(scryfall.colors) ? scryfall.colors : [];
         }
     } else {
         sourceColors = Array.isArray(scryfall.colors) ? scryfall.colors : [];
@@ -1270,11 +1314,18 @@ function hasScryfallDependentFilters(filters) {
     return hasCmcFilter || hasCardTypeFilter || hasCardTypeFilters || hasColorFilter || hasColorCountFilter || hasFormatFilter;
 }
 
+function hasScryfallDependentSorting() {
+    const scryfallFields = new Set(["color", "mana_cost_colors", "type", "cmc"]);
+    return state.sortCriteria.some(c => scryfallFields.has(c.field));
+}
+
 async function enrichCardsForScryfallFilters(cards) {
     const cardsToEnrich = cards.filter(card => !card._scryfall && card["Scryfall ID"]);
     if (cardsToEnrich.length === 0) return;
 
-    await loadBulkLookupForIds(cardsToEnrich.map(card => card["Scryfall ID"]), { allowDownload: false });
+    // Use bulk data (downloads if missing, reads from scryfall.io — no API rate limit).
+    // onlyIfMissing prevents re-downloading a newer version just to apply filters.
+    await loadBulkLookupForIds(cardsToEnrich.map(card => card["Scryfall ID"]), { allowDownload: true, onlyIfMissing: true });
 
     const total = cardsToEnrich.length;
     const batchSize = 20;
@@ -1283,7 +1334,9 @@ async function enrichCardsForScryfallFilters(cards) {
 
     for (let index = 0; index < total; index += batchSize) {
         const batch = cardsToEnrich.slice(index, index + batchSize);
-        await Promise.all(batch.map(card => enrichCard(card, null)));
+        // cacheOnly: true — reads only from IndexedDB; avoids per-card API calls
+        // that would hit rate limits and block the filter result.
+        await Promise.all(batch.map(card => enrichCard(card, null, { cacheOnly: true })));
         const done = Math.min(index + batch.length, total);
         setStatus(`Scryfall: enriching ${done}/${total} for filters`);
     }
@@ -1310,7 +1363,7 @@ async function applyFilters() {
         cardType: elements.filterCardTypeSelect.value.toLowerCase()
     };
 
-    if (hasScryfallDependentFilters(filters)) {
+    if (hasScryfallDependentFilters(filters) || hasScryfallDependentSorting()) {
         await enrichCardsForScryfallFilters(state.allCards);
     }
 
@@ -2298,7 +2351,7 @@ async function handleCardsData(cards, sourceName = "CSV") {
     }
 
     loadFilterOptions(state.allCards);
-    renderCards(state.allCards);
+    await applyFilters();
     setStatus("Scryfall: idle");
 
     scheduleBackgroundCardWarmup(state.allCards);
