@@ -1409,6 +1409,8 @@ async function applyFilters() {
 }
 
 function renderCards(cards) {
+    hideTablePreview();
+    refreshTableColumnPicker();
     if (elements.entryCountSpan) {
         elements.entryCountSpan.textContent = cards.length;
     }
@@ -1416,6 +1418,8 @@ function renderCards(cards) {
     elements.cardCountSpan.textContent = totalQuantity;
 
     if (cards.length === 0) {
+        state.displayedCards = [];
+        if (state.scryfallObserver) state.scryfallObserver.disconnect();
         elements.cardsContainer.innerHTML = '<div class="no-results">No cards match your filters.</div>';
         return;
     }
@@ -1430,7 +1434,11 @@ function renderPage() {
     const end = (state.currentPage + 1) * state.cardsPerPage;
     const cardsToShow = state.displayedCards.slice(0, end);
 
-    elements.cardsContainer.innerHTML = cardsToShow.map(createCardElement).join("");
+    hideTablePreview();
+    refreshTableColumnPicker();
+    elements.cardsContainer.innerHTML = cardsToShow.length
+        ? (state.collectionView === "table" ? createCardsTable(cardsToShow) : cardsToShow.map(createCardElement).join(""))
+        : '<div class="no-results">No cards match your filters.</div>';
 
     if (end < state.displayedCards.length) {
         const button = document.createElement("button");
@@ -1729,17 +1737,21 @@ function buildLegalities(card) {
 async function enrichCard(card, cardElement, options = {}) {
     const { cacheOnly = false } = options;
 
-    if (!card["Scryfall ID"]) return;
-    if (card._scryfall) return;
+    if (!card._scryfall) {
+        if (!card["Scryfall ID"]) return;
+        const scryfallData = await fetchScryfallCard(card["Scryfall ID"], { cacheOnly });
+        if (!scryfallData) return;
+        applyScryfallDataToCard(card, scryfallData);
+    }
 
-    const scryfallData = await fetchScryfallCard(card["Scryfall ID"], { cacheOnly });
-    if (!scryfallData) return;
-
-    applyScryfallDataToCard(card, scryfallData);
-
-    if (cardElement) {
-        const newHtml = createCardElement(card);
+    if (cardElement && cardElement.isConnected) {
+        const newHtml = state.collectionView === "table" ? createTableRow(card) : createCardElement(card);
         cardElement.outerHTML = newHtml;
+        if (state.collectionView === "table") {
+            refreshTableColumnPicker();
+            const activeName = elements.cardsContainer.querySelector(`[data-preview-card="${card._id}"]:hover`);
+            if (activeName) showTablePreview(activeName);
+        }
     }
 }
 
@@ -1814,12 +1826,14 @@ function setupScryfallObserver(cards) {
         });
     }, { root: null, rootMargin: "400px", threshold: 0 });
 
-    document.querySelectorAll(".card-item").forEach(el => state.scryfallObserver.observe(el));
+    elements.cardsContainer.querySelectorAll(".card-item, .collection-row").forEach(el => {
+        if (!cardMap[el.dataset.cardId]?._scryfall) state.scryfallObserver.observe(el);
+    });
 }
 
 async function enrichVisibleCards() {
     setStatus("Scryfall: enriching visible");
-    const cardElements = Array.from(document.querySelectorAll(".card-item"));
+    const cardElements = Array.from(elements.cardsContainer.querySelectorAll(".card-item, .collection-row"));
     const ids = cardElements
         .map(cardElement => {
             const cardId = parseInt(cardElement.dataset.cardId, 10);
@@ -2371,6 +2385,7 @@ async function init() {
     closeInfoDialog();
 
     initializeDarkMode();
+    initializeTableView();
     state.scryfallCache = await openScryfallCache();
     await refreshBulkMetaStatus();
     loadSavedConfigs();

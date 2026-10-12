@@ -537,6 +537,7 @@ body {
 }
 
 .card-list {
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 0.8rem;
@@ -554,6 +555,7 @@ body {
 
 .cards-info-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem;
 }
@@ -574,6 +576,160 @@ body {
 .cards-grid {
     display: grid;
     gap: 0.75rem;
+}
+
+.view-switch {
+    display: inline-flex;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.view-button {
+    padding: 0.45rem 0.65rem;
+    border: 0;
+    background: var(--card);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.view-button[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--card);
+}
+
+.table-columns {
+    position: relative;
+    font-size: 0.82rem;
+}
+
+.table-columns summary {
+    padding: 0.45rem;
+    cursor: pointer;
+}
+
+.table-column-list {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: min(340px, calc(100vw - 48px));
+    max-height: 60vh;
+    overflow: auto;
+    padding: 0.8rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--card);
+    box-shadow: var(--shadow);
+    z-index: 40;
+}
+
+.table-column-list fieldset {
+    border: 0;
+    margin-bottom: 0.8rem;
+}
+
+.table-column-list legend {
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+}
+
+.table-column-list label {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.3rem 0;
+    overflow-wrap: anywhere;
+}
+
+.collection-table-scroll {
+    width: 100%;
+    min-width: 0;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+}
+
+.collection-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    font-size: 0.82rem;
+}
+
+.collection-table th,
+.collection-table td {
+    padding: 0.65rem 0.8rem;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    vertical-align: top;
+    min-width: 100px;
+    max-width: 360px;
+    overflow-wrap: anywhere;
+    white-space: pre-line;
+}
+
+.collection-table thead th {
+    background: var(--filter-row-bg);
+    white-space: nowrap;
+}
+
+.collection-table th small {
+    display: block;
+    font-weight: 400;
+    color: var(--ink-soft);
+    margin-top: 0.2rem;
+}
+
+.collection-table tbody tr:hover {
+    background: var(--filter-row-bg);
+}
+
+.table-card-name {
+    border: 0;
+    padding: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+    min-width: 160px;
+    max-width: 280px;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+
+.table-card-name:hover {
+    text-decoration: underline;
+}
+
+.table-card-preview {
+    position: fixed;
+    width: min(260px, calc(100vw - 16px), calc((100vh - 16px) * 0.716));
+    aspect-ratio: 0.716;
+    background: var(--card);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+    pointer-events: none;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    color: var(--ink-soft);
+}
+
+.table-card-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 6px;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
 }
 
 .cards-grid .ghost-btn {

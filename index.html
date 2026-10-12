@@ -209,6 +209,14 @@
                 <div class="cards-info">
                     <span>Filtered: <strong id="entry-count">0</strong> entries, <strong id="card-count">0</strong> cards</span>
                     <div class="cards-info-actions">
+                        <div id="collection-view" class="view-switch" role="group" aria-label="Collection view">
+                            <button class="view-button" type="button" data-view="cards" aria-pressed="true">Cards</button>
+                            <button class="view-button" type="button" data-view="table" aria-pressed="false">Table</button>
+                        </div>
+                        <details id="table-columns" class="table-columns hidden">
+                            <summary>Columns</summary>
+                            <div id="table-column-list" class="table-column-list"></div>
+                        </details>
                         <select id="download-format" class="filter-select download-format-select" aria-label="Download format">
                             <option value="csv">ManaBox CSV</option>
                             <option value="txt">Decklist TXT</option>
@@ -228,6 +236,7 @@
     <script src="assets/js/dom-state.js"></script>
     <script src="assets/js/filtering-ui.js"></script>
     <script src="assets/js/scryfall-service.js"></script>
+    <script src="assets/js/table-view.js"></script>
     <script src="assets/js/app.js"></script>
 
     <div id="info-dialog" class="dialog-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="info-dialog-title">
