@@ -95,7 +95,7 @@ function createTableRow(card) {
         if (column === "manabox:Name") {
             return `<th scope="row"><button type="button" class="table-card-name" data-preview-card="${card._id}">${escapeHtml(card._displayName || card.Name || "Unknown card")}</button></th>`;
         }
-        return `<td>${escapeHtml(formatTableValue(value))}</td>`;
+        return `<td>${isManaBox ? escapeHtml(formatTableValue(value)) : renderScryfallValue(value, field.split(".").pop())}</td>`;
     });
     return `<tr class="collection-row" data-card-id="${card._id}">${cells.join("")}</tr>`;
 }

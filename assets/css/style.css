@@ -406,6 +406,82 @@ body {
     gap: 0.4rem;
 }
 
+.set-filter-dropdown {
+    position: relative;
+}
+
+.set-filter-dropdown summary {
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--input-bg);
+    color: var(--ink);
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.set-filter-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 100%;
+    padding: 0.65rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--card);
+    box-shadow: var(--shadow);
+    z-index: 35;
+}
+
+.set-filter-options {
+    max-height: 200px;
+    overflow: auto;
+    margin-top: 0.5rem;
+}
+
+.selected-sets:not(:empty) {
+    margin-top: 0.5rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.filter-group .set-filter-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    margin: 0;
+    font-size: 0.82rem;
+    font-weight: 400;
+    cursor: pointer;
+}
+
+.set-filter-option input {
+    flex: 0 0 auto;
+    margin-top: 0.2rem;
+    accent-color: var(--accent);
+}
+
+.set-filter-option span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.set-filter-icon {
+    flex: 0 0 20px;
+    width: 20px;
+    margin-top: 0.15rem;
+    text-align: center;
+    font-size: 1rem;
+    color: var(--ink);
+}
+
+.set-filter-empty {
+    padding: 0.35rem 0;
+    color: var(--ink-soft);
+    font-size: 0.82rem;
+}
+
 #filter-color-mode {
     margin-top: 0.55rem;
 }
@@ -429,6 +505,10 @@ body {
 }
 
 .color-filter-btn {
+    display: grid;
+    place-items: center;
+    background: transparent;
+    color: var(--ink);
     border: 1px solid var(--border-color);
     border-radius: 999px;
     height: 34px;
@@ -436,7 +516,29 @@ body {
     font-size: 0.82rem;
     cursor: pointer;
     transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
-    opacity: 0.55;
+    opacity: 0.85;
+}
+
+.mana-symbol {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    vertical-align: -3px;
+    object-fit: contain;
+    margin-right: 2px;
+}
+
+.color-filter-btn .mana-symbol {
+    width: 24px;
+    height: 24px;
+    margin: 0;
+}
+
+.color-filter-btn:focus-visible,
+.view-button:focus-visible,
+.table-card-name:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
 }
 
 .color-filter-btn:hover {
@@ -445,37 +547,7 @@ body {
 
 .color-filter-btn.active {
     opacity: 1;
-    box-shadow: 0 0 0 2px rgba(15, 139, 141, 0.35);
-}
-
-.color-filter-btn.color-w {
-    background: #f5efe7;
-    color: #2b2b2b;
-}
-
-.color-filter-btn.color-u {
-    background: #7fb3d5;
-    color: #102030;
-}
-
-.color-filter-btn.color-b {
-    background: #2f3a45;
-    color: #f2f2f2;
-}
-
-.color-filter-btn.color-r {
-    background: #d86f62;
-    color: #2b1a18;
-}
-
-.color-filter-btn.color-g {
-    background: #7daa67;
-    color: #173020;
-}
-
-.color-filter-btn.color-c {
-    background: #d9d9d9;
-    color: #2b2b2b;
+    box-shadow: 0 0 0 2px var(--accent);
 }
 
 .grid-2 {

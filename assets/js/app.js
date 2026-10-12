@@ -712,6 +712,7 @@ function buildSelectOptions(selectEl, values, getLabel = value => value) {
 }
 
 function loadFilterOptions(cards) {
+    loadSetFilterOptions(cards);
     const binderNames = new Set();
     const binderTypes = new Set();
     const rarities = new Set();
@@ -1347,6 +1348,7 @@ async function enrichCardsForScryfallFilters(cards) {
 async function applyFilters() {
     const filters = {
         name: elements.searchNameInput.value.toLowerCase(),
+        sets: new Set(state.selectedSets),
         binderName: elements.filterBinderNameSelect.value.toLowerCase(),
         binderType: elements.filterBinderTypeSelect.value.toLowerCase(),
         rarity: elements.filterRaritySelect.value.toLowerCase(),
@@ -1369,6 +1371,7 @@ async function applyFilters() {
 
     state.filteredCards = state.allCards.filter(card => {
         if (filters.name && !card._filterName.includes(filters.name)) return false;
+        if (filters.sets.size && !filters.sets.has(getCollectionSet(card).key)) return false;
         if (filters.binderName && card._filterBinderName !== filters.binderName) return false;
         if (filters.binderType && card._filterBinderType !== filters.binderType) return false;
         if (filters.rarity && card._filterRarity !== filters.rarity) return false;
@@ -1516,6 +1519,18 @@ function createCardElement(card) {
                 </div>
 
                 <div class="card-details">
+                    <div>
+                        <div class="detail-label">Mana cost</div>
+                        <div class="detail-value">${renderScryfallValue(getScryfallDisplayValue(card, "mana_cost"), "mana_cost")}</div>
+                    </div>
+                    <div>
+                        <div class="detail-label">Colors</div>
+                        <div class="detail-value">${renderScryfallValue(getScryfallDisplayValue(card, "colors"), "colors")}</div>
+                    </div>
+                    <div>
+                        <div class="detail-label">Color identity</div>
+                        <div class="detail-value">${renderScryfallValue(getScryfallDisplayValue(card, "color_identity"), "color_identity")}</div>
+                    </div>
                     <div>
                         <div class="detail-label">Collector</div>
                         <div class="detail-value">${escapeHtml(card["Collector number"] || "")}</div>
@@ -1897,6 +1912,7 @@ async function updateBulkDataForCurrentCards() {
 
 function resetFilters() {
     elements.searchNameInput.value = "";
+    setSelectedSets([]);
     elements.filterBinderNameSelect.value = "";
     elements.filterBinderTypeSelect.value = "";
     elements.filterRaritySelect.value = "";
@@ -1969,6 +1985,7 @@ function getCurrentFilterState() {
     return {
         filters: {
             name: elements.searchNameInput.value,
+            sets: [...state.selectedSets],
             binderName: elements.filterBinderNameSelect.value,
             binderType: elements.filterBinderTypeSelect.value,
             rarity: elements.filterRaritySelect.value,
@@ -2048,6 +2065,7 @@ function loadSelectedConfig() {
     if (!config) return;
 
     elements.searchNameInput.value = config.filters.name || "";
+    setSelectedSets(config.filters.sets || []);
     elements.filterBinderNameSelect.value = config.filters.binderName || "";
     elements.filterBinderTypeSelect.value = config.filters.binderType || "";
     elements.filterRaritySelect.value = config.filters.rarity || "";
@@ -2238,6 +2256,10 @@ function attachEventListeners() {
     }
 
     elements.searchNameInput.addEventListener("input", () => scheduleApplyFilters());
+    elements.searchSetsInput.addEventListener("input", renderSetFilterOptions);
+    initializeSetFilterDropdown();
+    elements.setFilterOptions.addEventListener("change", handleSetFilterChange);
+    elements.selectedSets.addEventListener("change", handleSetFilterChange);
 
     [
         elements.filterBinderNameSelect,
@@ -2294,6 +2316,7 @@ function attachEventListeners() {
             const button = event.target.closest(".color-filter-btn");
             if (!button) return;
             button.classList.toggle("active");
+            button.setAttribute("aria-pressed", String(button.classList.contains("active")));
             scheduleApplyFilters();
         });
     }

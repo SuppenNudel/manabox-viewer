@@ -62,6 +62,20 @@
                     </div>
 
                     <div class="filter-group">
+                        <label for="search-sets">Sets</label>
+                        <details id="set-filter-dropdown" class="set-filter-dropdown">
+                            <summary id="set-filter-summary">Choose sets</summary>
+                            <div class="set-filter-menu">
+                                <input type="search" id="search-sets" class="filter-input" placeholder="Search set name or code" aria-label="Search set name or code" aria-controls="set-filter-options" />
+                                <div id="set-filter-options" class="set-filter-options" role="group" aria-label="Available sets">
+                                    <p class="set-filter-empty">No sets loaded.</p>
+                                </div>
+                            </div>
+                        </details>
+                        <div id="selected-sets" class="selected-sets" role="group" aria-label="Selected sets"></div>
+                    </div>
+
+                    <div class="filter-group">
                         <label for="filter-binder-name">Binder Name</label>
                         <select id="filter-binder-name" class="filter-select">
                             <option value="">All Binders</option>

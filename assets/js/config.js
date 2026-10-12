@@ -118,12 +118,21 @@ const FORMAT_LABELS = {
 };
 
 const COLOR_FILTER_OPTIONS = [
-    { value: "w", label: "W", className: "color-w" },
-    { value: "u", label: "U", className: "color-u" },
-    { value: "b", label: "B", className: "color-b" },
-    { value: "r", label: "R", className: "color-r" },
-    { value: "g", label: "G", className: "color-g" },
-    { value: "c", label: "C", className: "color-c" }
+    { value: "w", label: "White", className: "color-w" },
+    { value: "u", label: "Blue", className: "color-u" },
+    { value: "b", label: "Black", className: "color-b" },
+    { value: "r", label: "Red", className: "color-r" },
+    { value: "g", label: "Green", className: "color-g" },
+    { value: "c", label: "Colorless", className: "color-c" }
 ];
 
 const COLOR_ORDER = ["w", "u", "b", "r", "g", "c"];
+
+const SCRYFALL_SYMBOL_CODES = new Set([
+    "T", "Q", "E", "P", "PW", "CHAOS", "A", "TK", "X", "Y", "Z",
+    ...Array.from({ length: 21 }, (_, index) => String(index)), "100", "1000000",
+    "W/U", "W/B", "B/R", "B/G", "U/B", "U/R", "R/G", "R/W", "G/W", "G/U",
+    "B/G/P", "B/R/P", "G/U/P", "G/W/P", "R/G/P", "R/W/P", "U/B/P", "U/R/P", "W/B/P", "W/U/P",
+    "C/W", "C/U", "C/B", "C/R", "C/G", "2/W", "2/U", "2/B", "2/R", "2/G",
+    "H", "W/P", "U/P", "B/P", "R/P", "G/P", "C/P", "HW", "HR", "W", "U", "B", "R", "G", "C", "S", "L", "D"
+]);

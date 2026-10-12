@@ -106,12 +106,135 @@ function getCardTypeLabelWithIcon(value) {
     return `${icon} ${getCardTypeLabel(value)}`;
 }
 
+function renderScryfallSymbol(symbol) {
+    const code = String(symbol).replace(/^\{|\}$/g, "");
+    const specialCodes = { "\u00bd": "HALF", "\u221e": "INFINITY" };
+    if (!SCRYFALL_SYMBOL_CODES.has(code) && !specialCodes[code]) return escapeHtml(symbol);
+    const filename = specialCodes[code] || code.replaceAll("/", "");
+    const color = COLOR_FILTER_OPTIONS.find(option => option.value === code.toLowerCase());
+    const label = color ? `${color.label} mana {${code}}` : `{${code}}`;
+    return `<img class="mana-symbol" src="https://svgs.scryfall.io/card-symbols/${filename}.svg" alt="${escapeHtml(label)}" title="${escapeHtml(label)}" width="18" height="18">`;
+}
+
+function renderScryfallText(value) {
+    return String(value).split(/(\{[^{}]+\})/g).map(part => {
+        return /^\{[^{}]+\}$/.test(part) ? renderScryfallSymbol(part) : escapeHtml(part);
+    }).join("");
+}
+
+function renderScryfallValue(value, field = "") {
+    if (value === null || value === undefined) return "-";
+    if (Array.isArray(value)) {
+        if (["colors", "color_identity", "color_indicator", "produced_mana"].includes(field)) {
+            const colors = [...new Set(value.flat())];
+            if (!colors.length) return field === "produced_mana" ? "-" : renderScryfallSymbol("{C}");
+            return colors.map(color => renderScryfallSymbol(`{${color}}`)).join(" ");
+        }
+        return value.map(entry => renderScryfallValue(entry, field)).join(" / ") || "-";
+    }
+    if (typeof value === "object") {
+        return Object.entries(value).map(([key, entry]) => `${escapeHtml(key)}: ${renderScryfallValue(entry, key)}`).join("; ");
+    }
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    return value === "" ? "-" : renderScryfallText(value);
+}
+
+function getScryfallDisplayValue(card, field) {
+    const data = card._scryfall;
+    if (!data) return undefined;
+    if (field !== "color_identity" && state.multiFaceMode === "front" && data.card_faces?.[0]?.[field] !== undefined) {
+        return data.card_faces[0][field];
+    }
+    if (data[field] !== undefined && data[field] !== null) return data[field];
+    const values = (data.card_faces || []).map(face => face[field]).filter(value => value !== undefined && value !== null);
+    if (!values.length) return undefined;
+    return field === "colors" ? [...new Set(values.flat())] : values;
+}
+
 function initializeColorFilterButtons() {
     if (!elements.filterColorButtons) return;
 
     elements.filterColorButtons.innerHTML = COLOR_FILTER_OPTIONS
-        .map(color => `<button type="button" class="color-filter-btn ${color.className}" data-color="${color.value}">${color.label}</button>`)
+        .map(color => `<button type="button" class="color-filter-btn ${color.className}" data-color="${color.value}" title="${color.label}" aria-label="${color.label}" aria-pressed="false">${renderScryfallSymbol(`{${color.value.toUpperCase()}}`)}</button>`)
         .join("");
+}
+
+function getCollectionSet(card) {
+    const code = String(card["Set code"] || "").trim().toLowerCase();
+    const name = String(card["Set name"] || "").trim();
+    return { key: code ? `code:${code}` : (name ? `name:${name.toLowerCase()}` : ""), code, name };
+}
+
+function loadSetFilterOptions(cards) {
+    const sets = new Map();
+    cards.forEach(card => {
+        const set = getCollectionSet(card);
+        if (!set.key) return;
+        const existing = sets.get(set.key);
+        if (!existing || (!existing.name && set.name)) sets.set(set.key, set);
+    });
+    state.availableSets = Array.from(sets.values()).sort((first, second) => {
+        return (first.name || first.code).localeCompare(second.name || second.code);
+    });
+    renderSetFilterOptions();
+}
+
+function getMatchingSetOptions(query) {
+    const search = String(query || "").trim().toLowerCase();
+    return state.availableSets.filter(set => !state.selectedSets.includes(set.key)
+        && (set.name.toLowerCase().includes(search) || set.code.includes(search)));
+}
+
+function renderSetFilterOptions() {
+    const createOption = (set, checked) => {
+        const label = set.name && set.code ? `${set.name} (${set.code.toUpperCase()})` : (set.name || set.code.toUpperCase());
+        const iconCode = set.code.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const icon = iconCode ? `<i class="ss ss-${iconCode} set-filter-icon" aria-hidden="true"></i>` : "";
+        return `<label class="set-filter-option"><input type="checkbox" value="${escapeHtml(set.key)}" ${checked ? "checked" : ""}>${icon}<span>${escapeHtml(label)}</span></label>`;
+    };
+    elements.setFilterSummary.textContent = state.selectedSets.length ? `Choose sets (${state.selectedSets.length} selected)` : "Choose sets";
+    const setsByKey = new Map(state.availableSets.map(set => [set.key, set]));
+    elements.selectedSets.innerHTML = state.selectedSets.map(key => {
+        const set = setsByKey.get(key) || { key, code: key.startsWith("code:") ? key.slice(5) : "", name: key.startsWith("name:") ? key.slice(5) : "" };
+        return createOption(set, true);
+    }).join("");
+    const matching = getMatchingSetOptions(elements.searchSetsInput.value);
+    elements.setFilterOptions.innerHTML = matching.length
+        ? matching.map(set => createOption(set, false)).join("")
+        : `<p class="set-filter-empty">${state.availableSets.length ? "No matching sets." : "No sets loaded."}</p>`;
+}
+
+function setSelectedSets(keys) {
+    state.selectedSets = [...new Set((Array.isArray(keys) ? keys : []).filter(key => typeof key === "string" && /^(code|name):.+/.test(key)))];
+    elements.searchSetsInput.value = "";
+    elements.setFilterDropdown.open = false;
+    renderSetFilterOptions();
+}
+
+function handleSetFilterChange(event) {
+    const input = event.target;
+    if (!input.matches('input[type="checkbox"]')) return;
+    if (input.checked) state.selectedSets = [...new Set([...state.selectedSets, input.value])];
+    else state.selectedSets = state.selectedSets.filter(key => key !== input.value);
+    renderSetFilterOptions();
+    if (elements.setFilterDropdown.open) elements.searchSetsInput.focus();
+    scheduleApplyFilters();
+}
+
+function initializeSetFilterDropdown() {
+    elements.setFilterDropdown.addEventListener("toggle", () => {
+        if (elements.setFilterDropdown.open) elements.searchSetsInput.focus();
+    });
+    elements.setFilterDropdown.addEventListener("keydown", event => {
+        if (event.key === "Escape") {
+            event.preventDefault();
+            elements.setFilterDropdown.open = false;
+            elements.setFilterSummary.focus();
+        }
+    });
+    document.addEventListener("click", event => {
+        if (!elements.setFilterDropdown.contains(event.target)) elements.setFilterDropdown.open = false;
+    });
 }
 
 function getSelectedColorFilters() {
@@ -144,6 +267,7 @@ function setSelectedColorFilters(selectedColors) {
     const selected = new Set((selectedColors || []).map(color => String(color).toLowerCase()));
     Array.from(elements.filterColorButtons.querySelectorAll(".color-filter-btn")).forEach(button => {
         button.classList.toggle("active", selected.has(String(button.dataset.color).toLowerCase()));
+        button.setAttribute("aria-pressed", String(button.classList.contains("active")));
     });
 }
 

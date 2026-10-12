@@ -46,6 +46,7 @@ The viewer can be opened and preloaded directly from the Cardmarket Helper add-o
 ### Supported filters
 
 - Card name
+- Sets: open the dropdown, search by partial set name or code, then select multiple sets with Keyrune set icons. Cards from any selected set are included; no selection includes all sets.
 - Binder name / binder type
 - Rarity
 - Condition
@@ -99,6 +100,9 @@ If some CSV Scryfall IDs are not present in `default_cards`, the app shows a det
 - **Enrich visible**: enriches currently visible cards with Scryfall details.
 - **Update bulk data**: refreshes cached bulk records for your loaded collection.
 - **Details / Compact**: toggles card detail density.
+- **Cards / Table**: switches between card entries and a table using the same filters, sorting, and pagination.
+- **Columns** (table view): selects ManaBox CSV and Scryfall fields. Name remains visible; hover or focus a name to preview its card image. View and column choices are saved locally.
+- Color filters, card details, and Scryfall table fields use Scryfall's official symbol artwork for colors and brace-delimited costs (including hybrid and Phyrexian mana). Symbol images require an internet connection.
 
 ## Troubleshooting
 
