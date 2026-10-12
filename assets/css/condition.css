@@ -4,26 +4,39 @@
     display: inline-block;
     text-decoration: none;
     color: inherit;
+    vertical-align: middle;
+    line-height: 1;
+}
+
+.article-condition:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 7px;
 }
 
 .article-condition .badge {
     width: 32px;
-    max-height: 16px;
+    height: 16px;
+    border: 0;
+    background-color: #6c757d;
     color: #ffffff;
-    line-height: 0.5rem;
-    padding: 0.25rem 0.5rem;
-    border-radius: 3px;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
+    line-height: 1;
+    padding: 0;
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0;
     text-align: center;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
 }
 
-.article-condition.condition-mt .badge { background-color: #0aa2c0; }
-.article-condition.condition-nm .badge { background-color: #1b7f5d; }
-.article-condition.condition-ex .badge { background-color: #7fbf4d; }
-.article-condition.condition-gd .badge { background-color: #e0b645; color: #2b2b2b; }
-.article-condition.condition-lp .badge { background-color: #e2833c; }
-.article-condition.condition-pl .badge { background-color: #c94b4b; }
-.article-condition.condition-po .badge { background-color: #8b2c2c; }
+.article-condition.condition-mt .badge { background-color: #17a2b8; }
+.article-condition.condition-nm .badge { background-color: #3caf56; }
+.article-condition.condition-ex .badge { background-color: #82891e; }
+.article-condition.condition-gd .badge { background-color: #ffc107; color: #333333; }
+.article-condition.condition-lp .badge { background-color: #fd8b2b; }
+.article-condition.condition-pl .badge { background-color: #e56874; }
+.article-condition.condition-po .badge { background-color: #dc3545; }

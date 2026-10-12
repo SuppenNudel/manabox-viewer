@@ -1471,10 +1471,6 @@ function createCardElement(card) {
         mythic: "ss-mythic"
     };
     const keyruneRarityClass = keyruneRarityClassMap[rarityKey] || "ss-common";
-    const conditionKey = (card["Condition"] || "").toLowerCase().replace(/\s+/g, "_");
-    const conditionData = CONDITION_CODE_MAP[conditionKey] || { code: "un", label: card["Condition"] || "Unknown" };
-    const pageLang = (document.documentElement.lang || "en").split("-")[0];
-    const conditionHelpUrl = `https://help.cardmarket.com/${pageLang}/CardCondition`;
     const languageKey = normalizeLanguage(card["Language"] || "");
     const languageIcon = LANGUAGE_ICONS[languageKey] || { icon: "🌐", label: card["Language"] || "Unknown" };
 
@@ -1513,7 +1509,7 @@ function createCardElement(card) {
 
                 <div class="card-metadata">
                     <span class="badge-icon" title="${escapeHtml(rarityIcon.label)}">${rarityIcon.icon}</span>
-                    <a href="${conditionHelpUrl}" target="_blank" rel="noopener noreferrer" class="article-condition condition-${conditionData.code}" title="${escapeHtml(conditionData.label)}"><span class="badge">${escapeHtml(conditionData.code.toUpperCase())}</span></a>
+                    ${renderConditionBadge(card["Condition"])}
                     <span class="badge-icon" title="${escapeHtml(languageIcon.label)}">${languageIcon.icon}</span>
                     ${isFoil ? '<span class="badge-icon" title="Foil">⭐</span>' : ''}
                 </div>

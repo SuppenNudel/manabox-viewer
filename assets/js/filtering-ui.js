@@ -60,6 +60,16 @@ function getRarityLabelWithIcon(value) {
     return getRarityLabel(value);
 }
 
+function renderConditionBadge(value) {
+    const key = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+    const condition = CONDITION_CODE_MAP[key]
+        || Object.values(CONDITION_CODE_MAP).find(entry => entry.code === key || (key === "m" && entry.code === "mt"))
+        || { code: "un", label: String(value || "Unknown condition") };
+    const language = (document.documentElement.lang || "en").split("-")[0];
+    const helpLanguage = /^[a-z]{2}$/.test(language) ? language : "en";
+    return `<a href="https://help.cardmarket.com/${helpLanguage}/CardCondition" target="_blank" rel="noopener noreferrer" class="article-condition condition-${condition.code}" title="${escapeHtml(condition.label)}" aria-label="${escapeHtml(condition.label)}"><span class="badge">${condition.code.toUpperCase()}</span></a>`;
+}
+
 function getConditionLabel(value) {
     const key = String(value || "").toLowerCase().replace(/\s+/g, "_");
     return CONDITION_CODE_MAP[key] ? CONDITION_CODE_MAP[key].label : toDisplayLabel(value);

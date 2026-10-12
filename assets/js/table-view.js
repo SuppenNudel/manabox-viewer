@@ -95,6 +95,13 @@ function createTableRow(card) {
         if (column === "manabox:Name") {
             return `<th scope="row"><button type="button" class="table-card-name" data-preview-card="${card._id}">${escapeHtml(card._displayName || card.Name || "Unknown card")}</button></th>`;
         }
+        if (column === "manabox:Condition") return `<td>${renderConditionBadge(value)}</td>`;
+        if (column === "manabox:Set name" || column === "scryfall:set_name") {
+            const setCode = String(isManaBox ? card["Set code"] || card._scryfall?.set || "" : card._scryfall?.set || card["Set code"] || "")
+                .toLowerCase().replace(/[^a-z0-9]/g, "");
+            const icon = setCode && value ? `<i class="ss ss-${setCode} set-icon" aria-hidden="true"></i> ` : "";
+            return `<td>${icon}${escapeHtml(formatTableValue(value))}</td>`;
+        }
         return `<td>${isManaBox ? escapeHtml(formatTableValue(value)) : renderScryfallValue(value, field.split(".").pop())}</td>`;
     });
     return `<tr class="collection-row" data-card-id="${card._id}">${cells.join("")}</tr>`;
